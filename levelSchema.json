@@ -1,0 +1,103 @@
+{ "type" : "object",
+  "properties" : {
+    "type" : {"type" : "string", "pattern" : "^game|lobby|jail|maintenance$"},
+    "mode" : {"type" : "string", "pattern" : "^|lobby|jail|maintenance|royale|hell$"},
+    "shortname" : {"type" : "string", "minLength" : 0},
+    "resource" : {
+        "type" : "array",
+        "items" : {
+            "type" : "object",
+            "properties" : {
+                "id" : {"type":"string", "minLength" : 1},
+                "src" : {"type":"string", "minLength" : 1}
+            },
+            "required" : ["id", "src"]
+        }
+    },
+    "musicOverridePath" : {"type" : "string"},
+    "soundOverridePath" : {"type" : "string"},
+    "initial" : { "type" : "integer" },
+    "world" : {
+        "type" : "array",
+        "minItems" : 1,
+        "items" : {
+            "type" : "object",
+            "properties" : {
+                "id" : { "type" : "integer" },
+                "name" : { "type" : "string", "minLength" : 1},
+                "initial" : { "type" : "integer" },
+                "zone" : {
+                    "type" : "array",
+                    "minItems" : 1,
+                    "items" : {
+                        "type": "object",
+                        "properties" : {
+                            "id" : { "type" : "integer" },
+                            "initial" : { "type" : "integer" },
+                            "color" : { "type" : "string", "pattern" : "#[0-9a-fA-F]{6}" },
+                            "music" : { "type" : "string"},
+                            "data" : {
+                                "type" : "array",
+                                "minItems" : 1,
+                                "items" : {
+                                    "type" : "array",
+                                    "minItems" : 1,
+                                    "items" : {"type" : "integer"}
+                                }
+                            },
+                            "layers" : {
+                                "type" : "array",
+                                "minItems" : 1,
+                                "items" : {
+                                    "type" : "object",
+                                    "properties": {
+                                        "z" : { "type" : "integer" },
+                                        "data" : {
+                                            "type" : "array",
+                                            "minItems" : 1,
+                                            "items" : {
+                                                "type" : "array",
+                                                "minItems" : 1,
+                                                "items" : {"type" : "integer"}
+                                            }
+                                        }
+                                    },
+                                    "minItems" : 1,
+                                    "required" : ["z", "data"]
+                                }
+                            },
+                            "obj" : {
+                                "type" : "array",
+                                "items" : {
+                                    "type" : "object",
+                                    "properties" : {
+                                        "type" : {"type" : "integer"},
+                                        "pos" : {"type" : "integer"},
+                                        "param" : {"type" : "array"}
+                                    },
+                                    "required" : ["type", "pos", "param"]
+                                }
+                            },
+                            "warp" : {
+                                "type" : "array",
+                                "items" : {
+                                    "type" : "object",
+                                    "properties" : {
+                                        "id" : {"type" : "integer"},
+                                        "pos" : {"type" : "integer"},
+                                        "data" : {"type" : "integer"}
+                                    },
+                                    "required" : ["id", "pos", "data"]
+                                }
+                            }
+                        },
+                        "required" : ["id", "initial", "color", "music", "obj", "warp"]
+                    }
+                }
+            },
+            "required": ["id", "name", "initial", "zone"]
+        }
+    }
+  },
+  "required": ["type", "resource", "initial", "world", "shortname", "mode"]
+}
