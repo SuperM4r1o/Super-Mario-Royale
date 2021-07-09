@@ -12,7 +12,7 @@ if sys.version_info.major != 3:
     exit(1)
 
 from twisted.python import log
-from twisted.internet import task
+from twisted.internet import task, reactor, ssl
 log.startLogging(sys.stdout)
 
 from autobahn.twisted import install_reactor
@@ -136,14 +136,14 @@ class MyServerProtocol(WebSocketServerProtocol):
                         changed["kills"] = self.player.kills
                     if self.player.coins != 0:
                         changed["coins"] = self.player.coins
-                #if self.blocked:
-                #    changed["isBanned"] = True
+                if self.blocked:
+                    changed["isBanned"] = True
                 if self.player.forceRenamed:
                     changed["nickname"] = self.player.name
                     changed["squad"] = self.player.team
-                if 0<len(changed):
-                    #datastore.updateStats(self.dbSession, self.accountPriv["id"], changed)
-                    print("Outdated function attempted to use.")
+                #if 0<len(changed):
+                #    #datastore.updateStats(self.dbSession, self.accountPriv["id"], changed)
+                #    print("datastore.updateStats() called. No response.")
             self.server.players.remove(self.player)
             self.player.match.removePlayer(self.player)
             self.player.match = None
@@ -237,11 +237,11 @@ class MyServerProtocol(WebSocketServerProtocol):
                         self.blocked = True
                         self.setState("g") # Ingame
                         return
-                #if self.username != "":
-                #    if self.accountPriv["isBanned"]:
-                #        self.blocked = True
-                #        self.setState("g") # Ingame
-                #        return
+                # if self.username != "":
+                #     if self.accountPriv["isBanned"]:
+                #         self.blocked = True
+                #         self.setState("g") # Ingame
+                #         return
 
                 name = packet["name"]
                 team = packet["team"][:3].strip().upper()
@@ -319,7 +319,7 @@ class MyServerProtocol(WebSocketServerProtocol):
                     status, msg = False, "invalid captcha"
                 elif CP_IMPORT and packet["captcha"].upper() != self.server.captchas[self.address]:
                     status, msg = False, "incorrect captcha"
-                elif self.server.checkCurse(username):
+                elif util.checkCurse(username):
                     status, msg = False, "please choose a different username"
                 else:
                     status, msg = datastore.register(username, packet["password"])
@@ -379,13 +379,25 @@ class MyServerProtocol(WebSocketServerProtocol):
                 
                 datastore.updateAccount(self.username, packet)
 
+            elif type == "lpc": #password change
+                if self.username == "" or self.player is not None or self.pendingStat is None:
+                    self.sendClose2()
+                    return
+
+                datastore.changePassword(self.username, packet["password"])
+
         elif self.stat == "g":
             if type == "g00": # Ingame state ready
                 if self.player is None or self.pendingStat is None:
-                    if self.blocked:
-                        self.sendJSON({"packets": [{"game": "jail", "type": "g01"}], "type": "s01"})
+                    if self.server.shuttingDown:
+                        levelName, levelData = self.server.getRandomLevel("maintenance", None)
+                        self.sendJSON({"packets": [{"game": levelName, "levelData": json.dumps(levelData), "type": "g01"}], "type": "s01"})
                         return
-                    self.sendClose()
+                    if self.blocked:
+                        levelName, levelData = self.server.getRandomLevel("jail", None)
+                        self.sendJSON({"packets": [{"game": levelName, "levelData": json.dumps(levelData), "type": "g01"}], "type": "s01"})
+                        return
+                    self.sendClose2()
                     return
                 self.pendingStat = None
                 
@@ -501,16 +513,8 @@ class MyServerFactory(WebSocketServerFactory):
             self.reloadLevels()
         if self.assetsMetadataPath:
             self.tryReloadFile(self.assetsMetadataPath, self.readAssetsMetadata)
-        
-        WebSocketServerFactory.__init__(self, url.format(self.listenPort))
 
-        self.curse = list()
-        try:
-            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                   "words.json"), "r") as f:
-                self.curse = json.loads(f.read())
-        except:
-            pass
+        WebSocketServerFactory.__init__(self, url.format(self.listenPort))
 
         self.players = list()
         self.matches = list()
@@ -542,15 +546,15 @@ class MyServerFactory(WebSocketServerFactory):
         #l = task.LoopingCall(self.updateLeaderBoard)
         #l.start(60.0)
 
-    #def updateLeaderBoard(self):
-    #    if self.leaderBoardPath != '':
-    #        print("updating leader board at "+self.leaderBoardPath)
-    #        leaderBoard = datastore.getLeaderBoard()
-    #        with open(self.leaderBoardPath, "w") as f:
-    #            f.write(json.dumps(leaderBoard))
-    #    if self.debugMemoryLeak:
-    #        objgraph.show_growth(limit=50)
-    #        [objgraph.show_backrefs(x,filename="debug/refs"+str(i)+".dot") for i,x in enumerate(objgraph.by_type("Match"))]
+    # def updateLeaderBoard(self):
+    #     if self.leaderBoardPath != '':
+    #         print("updating leader board at "+self.leaderBoardPath)
+    #         leaderBoard = datastore.getLeaderBoard()
+    #         with open(self.leaderBoardPath, "w") as f:
+    #             f.write(json.dumps(leaderBoard))
+    #     if self.debugMemoryLeak:
+    #         objgraph.show_growth(limit=50)
+    #         [objgraph.show_backrefs(x,filename="debug/refs"+str(i)+".dot") for i,x in enumerate(objgraph.by_type("Match"))]
 
     def reloadLevel(self, level):
         fullPath = os.path.join(self.levelsPath, level)
@@ -566,35 +570,6 @@ class MyServerFactory(WebSocketServerFactory):
         except:
             print("error while loading "+level+":")
             raise
-
-    # Maybe this should be in a util class?
-    def leet2(self, word):
-        REPLACE = { str(index): str(letter) for index, letter in enumerate('oizeasgtb') }
-        letters = [ REPLACE.get(l, l) for l in word.lower() ]
-        return ''.join(letters)
-
-    def checkCurse(self, str):
-        if self.checkCheckCurse(str):
-            return True
-        str = self.leet2(str)
-        if self.checkCheckCurse(str):
-            return True
-        str = str.replace("|", "i").replace("$", "s").replace("@", "a").replace("&", "e")
-        str = ''.join(e for e in str if e.isalnum())
-        if self.checkCheckCurse(str):
-            return True
-        return False
-
-    def checkCheckCurse(self, str):
-        if len(str) <= 3:
-            return False
-        str = str.lower()
-        for w in self.curse:
-            if len(w) <= 3:
-                continue
-            if w in str:
-                return True
-        return False
 
 
     def reloadLevels(self):
@@ -656,6 +631,7 @@ class MyServerFactory(WebSocketServerFactory):
                 os.mkdir("debug")
 
         self.playerMin = config.getint('Match', 'PlayerMin')
+        self.playerMinPVP = config.getint('Match', 'PlayerMinPVP')
         try:
             oldCap = self.playerCap
         except:
@@ -818,8 +794,11 @@ class MyServerFactory(WebSocketServerFactory):
         return ("custom", self.levels[chosenLevel])
 
 if __name__ == '__main__':
-    factory = MyServerFactory(u"wss://127.0.0.1:{0}/royale/ws")
+    contextFactory = ssl.DefaultOpenSSLContextFactory('ssl/privkey.pem',
+                                                      'ssl/cert.pem')
+
+    factory = MyServerFactory(u"wss://marioroyale.tk:{0}/royale/ws")
     factory.setProtocolOptions(autoPingInterval=5, autoPingTimeout=5)
 
-    reactor.listenTCP(factory.listenPort, factory)
+    reactor.listenSSL(factory.listenPort, factory, contextFactory)
     reactor.run()

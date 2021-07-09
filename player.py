@@ -5,7 +5,6 @@ import emoji
 from twisted.internet import reactor
 from buffer import Buffer
 import util
-import os
 
 try:
     from discord_webhook import DiscordEmbed
@@ -30,7 +29,7 @@ class Player(object):
             self.name = self.server.defaultName if self.client.username != "" else self.server.defaultName
         if not isDev and self.skin in [52]:
             self.skin = 0
-        if self.client.username.lower() in ["terminalartix","dimension"]:
+        if self.client.username.lower() in ["terminalartix", "dimension", "casini loogi"]:
             self.isDev = 1
         self.pendingWorld = None
         self.level = int()
@@ -203,6 +202,7 @@ class Player(object):
             killer.addLeaderBoardCoins(10)
 
         elif code == 0x18: # PLAYER_RESULT_REQUEST
+
             if self.dead or self.win:
                 return
 
@@ -217,7 +217,7 @@ class Player(object):
                 if self.server.discordWebhook is not None and pos == 1 and not self.match.private:
                     name = self.name
                     # We already filter players that have a squad so...
-                    if len(self.team) == 0 and not isDev and util.checkCurse(self.name):
+                    if len(self.team) == 0 and util.checkCurse(self.name):
                         name = "[ censored ]"
                     embed = DiscordEmbed(description='**%s** has achieved **#1** victory royale!%s' % (name, " (PVP Mode)" if self.gameMode == 1 else " (Hell mode)" if self.gameMode == 2 else ""), color=0xffff00)
                     self.server.discordWebhook.add_embed(embed)

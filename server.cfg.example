@@ -1,0 +1,86 @@
+[Server]
+# The port on which the server will listen, if you don't know what it is, do not change it
+ListenPort: 9000
+
+# The moderator's code, this is useless until version 2.1.3
+MCode: 
+
+# The path to the file "status.json" (optional)
+StatusPath: 
+
+# The path to the file "leaderboard.json" (optional)
+LeaderBoardPath:
+
+# The path to the file "assets.json" (optional)
+AssetsMetadataPath: 
+
+# The name that will be set for unnamed players
+DefaultName: MARIO
+
+# The squad that will be set for players without squad
+DefaultTeam: 
+
+# Maximum of simultaneous connections per IP Address
+MaxSimulIP: 3
+
+# Discord Webhook Url for Discord functioning (see more: https://support.discordapp.com/hc/en-us/articles/228383668)
+DiscordWebhookUrl: 
+
+# Skin count - NOT USED if AssetsMetadataPath is set
+SkinCount: 4
+
+# If set to 1, guests can only use skins marked as "forGuests" in assets.json
+restrictPublicSkins: 0
+
+# If set to 1, players will be banned for picking up powerups in the lobby.
+banPowerUpInLobby: 0
+
+# Parameters for connecting to MySQL
+MySqlHost:
+MySqlPort:
+MySqlUser:
+MySqlDb:
+
+[Match]
+# Minimum of players to a match start by votes
+PlayerMin: 2
+
+# Maximum of players in a match
+PlayerCap: 75
+
+# The time until the match starts if no more players enter the match. (Disabled in solo private lobbies)
+AutoStartTime: 30
+
+# Whether to enable autostart in non-solo private lobbies
+EnableAutoStartInMultiPrivate: 1
+
+# Whether to enable level select in non-solo private lobbies
+EnableLevelSelectInMultiPrivate: 0
+
+# The match start timer, it is recommended to be at least 5 to allow the players to load the world.
+StartTimer: 7
+
+# Whether the votes can start the match or not (1 = yes, 0 = no)
+EnableVoteStart: 1
+
+# The rate of Votes/Players needed to the match start
+VoteRateToStart: 0.85
+
+# Whether players can enter the match while the start timer is running (1 = yes, 0 = no)
+AllowLateEnter: 1
+
+# The game's worlds, if you don't know what you're doing, do not change it / Ignored if levels directory present
+Worlds: world-1,world-2,world-3,world-5,world-6,world-l1,world-p
+
+# The gameMode PVP worlds / Ignored if levels directory present
+WorldsPVP: 
+
+# The gameMode Hell worlds / Ignored if levels directory present
+WorldsHell: 
+
+# Amount of leaderboard coins awarded for 1st, 2nd or 3rd place on the podium
+CoinRewardPodium1: 200
+CoinRewardPodium2: 100
+CoinRewardPodium3: 50
+# Amount of leaderboard coins awarded for hitting the top of a flagpole
+CoinRewardFlagpole: 500

@@ -58,7 +58,8 @@ def register(username, password):
             "wins": 0,
             "deaths": 0,
             "kills": 0,
-            "isDev": 0
+            "isDev": 0,
+            "isBanned": 0
             }
     accounts[username] = acc
     persistState()
@@ -133,8 +134,40 @@ def updateAccount(username, data):
         acc["skin"] = data["skin"]
     persistState()
 
+def updateStats(username, data):
+    if username not in accounts:
+        return
+
+    acc = accounts[username]
+    if "wins" in data:
+        acc["wins"] += data["wins"]
+    if "deaths" in data:
+        acc["deaths"] += data["deaths"]
+    if "kills" in data:
+        acc["kills"] += data["kills"]
+    if "coins" in data:
+        acc["coins"] += data["coins"]
+    persistState()
+
+def changePassword(username, password):
+    if username not in accounts:
+        return
+
+    if len(password) < 8:
+        return
+    if len(password) > 120:
+        return
+    acc = accounts[username]
+    salt = hashlib.sha256(os.urandom(60)).hexdigest().encode('ascii')
+    pwdhash = ph.hash(password.encode('utf-8')+salt)
+
+    acc["salt"] = salt
+    acc["pwdhash"] = pwdhash
+    persistState()
+
 def logout(token):
     if token in session:
         del session[token]
+
 
 loadState()
