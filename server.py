@@ -12,7 +12,7 @@ if sys.version_info.major != 3:
     exit(1)
 
 from twisted.python import log
-from twisted.internet import task, reactor, ssl
+from twisted.internet import task, ssl
 log.startLogging(sys.stdout)
 
 from autobahn.twisted import install_reactor
@@ -70,7 +70,6 @@ class MyServerProtocol(WebSocketServerProtocol):
 
         self.dcTimer = None
         #self.maxConLifeTimer = None
-        # self.dbSession = datastore.getDbSession()
 
     def startDCTimerIndependent(self, time):
         reactor.callLater(time, self.sendClose2)
@@ -110,12 +109,12 @@ class MyServerProtocol(WebSocketServerProtocol):
         self.setState("l")
 
     def onClose(self, wasClean, code, reason):
-        #print("WebSocket connection closed: {0}".format(reason))
+        print("WebSocket connection closed: {0}".format(reason))
 
-        #try:
-        #    self.maxConLifeTimer.cancel()
-        #except:
-        #    pass
+        try:
+            self.maxConLifeTimer.cancel()
+        except:
+            pass
         self.stopDCTimer()
 
         if self.address in self.server.captchas:
@@ -126,30 +125,46 @@ class MyServerProtocol(WebSocketServerProtocol):
 
         if self.stat == "g" and self.player != None:
             if self.username != "":
-                changed={}
+                stats={}
                 if not self.player.match.private:
                     if self.player.wins > 0:
-                        changed["wins"] = self.player.wins
+                        stats["wins"] = self.player.wins
                     if self.player.deaths > 0:
-                        changed["deaths"] = self.player.deaths
+                        stats["deaths"] = self.player.deaths
                     if self.player.kills > 0:
-                        changed["kills"] = self.player.kills
+                        stats["kills"] = self.player.kills
                     if self.player.coins != 0:
-                        changed["coins"] = self.player.coins
-                if self.blocked:
-                    changed["isBanned"] = True
-                if self.player.forceRenamed:
-                    changed["nickname"] = self.player.name
-                    changed["squad"] = self.player.team
-                #if 0<len(changed):
-                #    #datastore.updateStats(self.dbSession, self.accountPriv["id"], changed)
-                #    print("datastore.updateStats() called. No response.")
-            self.server.players.remove(self.player)
-            self.player.match.removePlayer(self.player)
-            self.player.match = None
-            self.player = None
-            self.pendingStat = None
-            self.stat = str()
+                        stats["coins"] = self.player.coins
+                if 0<len(stats):
+                    datastore.updateStats(self.player.client.username, stats)
+
+        self.server.players.remove(self.player)
+        self.player.match.removePlayer(self.player)
+        self.player.match = None
+        self.player = None
+        self.pendingStat = None
+        self.stat = str()
+
+        # if self.stat == "g" and self.player != None:
+        #     if self.username != "":
+        #         changed={}
+        #         if not self.player.match.private:
+        #             if self.player.wins > 0:
+        #                 changed["wins"] = self.player.wins
+        #             if self.player.deaths > 0:
+        #                 changed["deaths"] = self.player.deaths
+        #             if self.player.kills > 0:
+        #                 changed["kills"] = self.player.kills
+        #             if self.player.coins != 0:
+        #                 changed["coins"] = self.player.coins
+        #         if 0<len(changed):
+        #             datastore.updateStats(self.player.client.username, changed)
+        #     self.server.players.remove(self.player)
+        #     self.player.match.removePlayer(self.player)
+        #     self.player.match = None
+        #     self.player = None
+        #     self.pendingStat = None
+        #    self.stat = str()
         # self.dbSession.close()
 
     def onMessage(self, payload, isBinary):
@@ -232,16 +247,16 @@ class MyServerProtocol(WebSocketServerProtocol):
                 if self.server.shuttingDown:
                     self.setState("g") # Ingame
                     return
-                for b in self.server.blocked:
-                    if b[0] == self.address:
-                        self.blocked = True
-                        self.setState("g") # Ingame
-                        return
-                # if self.username != "":
-                #     if self.accountPriv["isBanned"]:
-                #         self.blocked = True
-                #         self.setState("g") # Ingame
-                #         return
+                #for b in self.server.blocked:
+                #    if b[0] == self.address:
+                #        self.blocked = True
+                #        self.setState("g") # Ingame
+                #        return
+                #if self.username != "":
+                #    if self.account["isBanned"]:
+                #        self.blocked = True
+                #        self.setState("g") # Ingame
+                #        return
 
                 name = packet["name"]
                 team = packet["team"][:3].strip().upper()
@@ -270,7 +285,7 @@ class MyServerProtocol(WebSocketServerProtocol):
 
             elif type == "llg": #login
                 if self.username != "" or self.player is not None or self.pendingStat is None:
-                    self.sendClose2()
+                    self.sendClose()
                     return
                 self.stopDCTimer()
                 
@@ -286,7 +301,7 @@ class MyServerProtocol(WebSocketServerProtocol):
 
                 j = {"type": "llg", "status": status, "msg": msg}
                 if status:
-                    self.username = username
+                    j["username"] = self.username = username
                     self.session = msg["session"]
                     self.server.authd.append(self.username)
                 else:
@@ -298,7 +313,7 @@ class MyServerProtocol(WebSocketServerProtocol):
                             del self.server.maxLoginTries[self.address]
                             self.server.loginBlocked.append(self.address)
                             reactor.callLater(60, self.server.loginBlocked.remove, self.address)
-                self.sendJSON({"type": "llg", "status": status, "msg": msg})
+                self.sendJSON(j)
 
             elif type == "llo": #logout
                 if self.username == "" or self.player is not None or self.pendingStat is None:
@@ -308,9 +323,9 @@ class MyServerProtocol(WebSocketServerProtocol):
                 datastore.logout(self.session)
                 self.sendJSON({"type": "llo"})
 
-            elif type == "lrg": #register
+            elif type == "lrg": # Register
                 if self.username != "" or self.address not in self.server.captchas or self.player is not None or self.pendingStat is None:
-                    self.sendClose2()
+                    self.sendClose()
                     return
                 self.stopDCTimer()
                 
@@ -319,14 +334,13 @@ class MyServerProtocol(WebSocketServerProtocol):
                     status, msg = False, "invalid captcha"
                 elif CP_IMPORT and packet["captcha"].upper() != self.server.captchas[self.address]:
                     status, msg = False, "incorrect captcha"
-                elif util.checkCurse(username):
+                elif self.server.checkCurse(username):
                     status, msg = False, "please choose a different username"
                 else:
                     status, msg = datastore.register(username, packet["password"])
 
                 if status:
                     del self.server.captchas[self.address]
-                    self.account = msg
                     self.username = username
                     self.session = msg["session"]
                     self.server.authd.append(self.username)
@@ -334,7 +348,7 @@ class MyServerProtocol(WebSocketServerProtocol):
 
             elif type == "lrc": #request captcha
                 if self.username != "" or self.player is not None or self.pendingStat is None:
-                    self.sendClose2()
+                    self.sendClose()
                     return
                 if not CP_IMPORT:
                     self.server.captchas[self.address] = ""
@@ -363,14 +377,15 @@ class MyServerProtocol(WebSocketServerProtocol):
                 
                 status, msg = datastore.resumeSession(packet["session"])
 
+                j = {"type": "lrs", "status": status, "msg": msg}
                 if status:
                     if msg["username"] in self.server.authd:
                         self.sendJSON({"type": "lrs", "status": False, "msg": "account already in use"})
                         return
-                    self.username = msg["username"]
+                    j["username"] = self.username = msg["username"]
                     self.session = msg["session"]
                     self.server.authd.append(self.username)
-                self.sendJSON({"type": "lrs", "status": status, "msg": msg})
+                self.sendJSON(j)
 
             elif type == "lpr": #update profile
                 if self.username == "" or self.player is not None or self.pendingStat is None:
@@ -381,7 +396,7 @@ class MyServerProtocol(WebSocketServerProtocol):
 
             elif type == "lpc": #password change
                 if self.username == "" or self.player is not None or self.pendingStat is None:
-                    self.sendClose2()
+                    self.sendClose()
                     return
 
                 datastore.changePassword(self.username, packet["password"])
@@ -441,28 +456,28 @@ class MyServerProtocol(WebSocketServerProtocol):
                     self.sendJSON({"type":"gsl","name":levelName,"status":"success","message":""})
                 else:
                     self.player.match.selectLevel(levelName)
-            elif type == "gbn":  # ban player
-                if not self.account["isDev"]:
-                    self.sendClose2()
-                pid = packet["pid"]
-                ban = packet["ban"]
-                self.player.match.banPlayer(pid, ban)
-            elif type == "gnm":  # rename player
-                if not self.account["isDev"]:
-                    self.sendClose2()
-                pid = packet["pid"]
-                newName = packet["name"]
-                self.player.match.renamePlayer(pid, newName)
-            elif type == "gsq":  # resquad player
-                if not self.account["isDev"]:
-                    self.sendClose2()
-                pid = packet["pid"]
-                newName = packet["name"].lower()
-                if len(newName)>3:
-                    newName = newName[:3]
-                self.player.match.resquadPlayer(pid, newName)
-            else:
-                print("unknown message! "+payload)
+            #elif type == "gbn":  # ban player
+            #    if not self.account["isDev"]:
+            #        self.sendClose2()
+            #    pid = packet["pid"]
+            #    ban = packet["ban"]
+            #    self.player.match.banPlayer(pid, ban)
+            #elif type == "gnm":  # rename player
+            #    if not self.account["isDev"]:
+            #        self.sendClose2()
+            #    pid = packet["pid"]
+            #    newName = packet["name"]
+            #    self.player.match.renamePlayer(pid, newName)
+            #elif type == "gsq":  # resquad player
+            #    if not self.account["isDev"]:
+            #        self.sendClose2()
+            #    pid = packet["pid"]
+            #    newName = packet["name"].lower()
+            #    if len(newName)>3:
+            #        newName = newName[:3]
+            #    self.player.match.resquadPlayer(pid, newName)
+            #else:
+            #    print("unknown message! "+payload)
 
     def onBinaryMessage(self):
         pktLenDict = { 0x10: 6, 0x11: 0, 0x12: 12, 0x13: 1, 0x17: 2, 0x18: 4, 0x19: 0, 0x20: 7, 0x30: 7 }
@@ -518,6 +533,14 @@ class MyServerFactory(WebSocketServerFactory):
 
         self.players = list()
         self.matches = list()
+
+        self.curse = list()
+        try:
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   "words.json"), "r") as f:
+                self.curse = json.loads(f.read())
+        except:
+            pass
         
         self.blocked = list()
         try:
@@ -542,19 +565,6 @@ class MyServerFactory(WebSocketServerFactory):
         self.out_messages = 0
 
         reactor.callLater(5, self.generalUpdate)
-
-        #l = task.LoopingCall(self.updateLeaderBoard)
-        #l.start(60.0)
-
-    # def updateLeaderBoard(self):
-    #     if self.leaderBoardPath != '':
-    #         print("updating leader board at "+self.leaderBoardPath)
-    #         leaderBoard = datastore.getLeaderBoard()
-    #         with open(self.leaderBoardPath, "w") as f:
-    #             f.write(json.dumps(leaderBoard))
-    #     if self.debugMemoryLeak:
-    #         objgraph.show_growth(limit=50)
-    #         [objgraph.show_backrefs(x,filename="debug/refs"+str(i)+".dot") for i,x in enumerate(objgraph.by_type("Match"))]
 
     def reloadLevel(self, level):
         fullPath = os.path.join(self.levelsPath, level)
@@ -615,7 +625,6 @@ class MyServerFactory(WebSocketServerFactory):
         self.listenPort = config.getint('Server', 'ListenPort')
         self.mcode = config.get('Server', 'MCode').strip()
         self.statusPath = config.get('Server', 'StatusPath').strip()
-        self.leaderBoardPath = config.get('Server', 'LeaderBoardPath', fallback='').strip()
         self.assetsMetadataPath = config.get('Server', 'AssetsMetadataPath').strip()
         self.defaultName = config.get('Server', 'DefaultName').strip()
         self.defaultTeam = config.get('Server', 'DefaultTeam').strip()
@@ -631,7 +640,6 @@ class MyServerFactory(WebSocketServerFactory):
                 os.mkdir("debug")
 
         self.playerMin = config.getint('Match', 'PlayerMin')
-        self.playerMinPVP = config.getint('Match', 'PlayerMinPVP')
         try:
             oldCap = self.playerCap
         except:
@@ -714,6 +722,35 @@ class MyServerFactory(WebSocketServerFactory):
     def shutdown(self):
         reactor.stop()
 
+    # Maybe this should be in a util class?
+    def leet2(self, word):
+        REPLACE = { str(index): str(letter) for index, letter in enumerate('oizeasgtb') }
+        letters = [ REPLACE.get(l, l) for l in word.lower() ]
+        return ''.join(letters)
+
+    def checkCurse(self, str):
+        if self.checkCheckCurse(str):
+            return True
+        str = self.leet2(str)
+        if self.checkCheckCurse(str):
+            return True
+        str = str.replace("|", "i").replace("$", "s").replace("@", "a").replace("&", "e")
+        str = ''.join(e for e in str if e.isalnum())
+        if self.checkCheckCurse(str):
+            return True
+        return False
+
+    def checkCheckCurse(self, str):
+        if len(str) <= 3:
+            return False
+        str = str.lower()
+        for w in self.curse:
+            if len(w) <= 3:
+                continue
+            if w in str:
+                return True
+        return False
+
     def blockAddress(self, address, playerName, reason):
         if not address in self.blocked:
             self.blocked.append([address, playerName, reason])
@@ -794,10 +831,9 @@ class MyServerFactory(WebSocketServerFactory):
         return ("custom", self.levels[chosenLevel])
 
 if __name__ == '__main__':
-    contextFactory = ssl.DefaultOpenSSLContextFactory('ssl/privkey.pem',
-                                                      'ssl/cert.pem')
+    contextFactory = ssl.DefaultOpenSSLContextFactory('ssl/privkey.pem','ssl/cert.pem')
 
-    factory = MyServerFactory(u"wss://marioroyale.tk:{0}/royale/ws")
+    factory = MyServerFactory(u"ws://127.0.0.1:{0}/royale/ws")
     factory.setProtocolOptions(autoPingInterval=5, autoPingTimeout=5)
 
     reactor.listenSSL(factory.listenPort, factory, contextFactory)

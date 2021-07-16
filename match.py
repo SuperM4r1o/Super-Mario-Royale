@@ -18,7 +18,7 @@ class Match(object):
         self.closed = False
         self.private = private
         self.gameMode = gameMode
-        self.levelMode = self.gameMode if self.gameMode != "royale" else "royale"
+        self.levelMode = self.gameMode
         self.playing = False
         self.usingCustomLevel = False
         self.autoStartOn = not self.private or (self.roomName != "" and self.server.enableAutoStartInMultiPrivate)
@@ -59,9 +59,9 @@ class Match(object):
                 self.autoStartTimer.cancel()
             except:
                 pass
-            # if self.tickTimer is not None:
-            #     self.tickTimer.stop()
-            #     self.tickTimer = None
+            if self.tickTimer is not None:
+                self.tickTimer.stop()
+                self.tickTimer = None
             self.server.removeMatch(self)
             return
         
@@ -177,6 +177,13 @@ class Match(object):
         if self.tickTimer is None:
             self.tickTimer = task.LoopingCall(self.tick)
             self.tickTimer.start(1.0)
+        if self.gameMode == "pvp":
+            if len(self.players) < 2:
+                self.tickTimer.stop()
+                self.tickTimer = 0
+            else:
+                self.tickTimer = task.LoopingCall(self.tick)
+                self.tickTimer.start(1.0)
 
         if self.isLobby or not player.lobbier or self.closed:
             for p in self.players:
@@ -185,13 +192,6 @@ class Match(object):
                     player.sendBin(0x10, p.serializePlayerObject())
             if self.startTimer != 0 or self.closed:
                 player.setStartTimer(self.startTimer)
-            if self.gameMode == "pvp":
-                if len(self.players) < 2:
-                    self.tickTimer.stop()
-                    self.tickTimer = 0
-                else:
-                    self.tickTimer = task.LoopingCall(self.tick)
-                    self.tickTimer.start(1.0)
         self.broadPlayerList()
 
         if not self.playing:
@@ -245,8 +245,6 @@ class Match(object):
         self.instantiateLevel()
         if (not self.private and self.gameMode == "royale"):
             self.addGoldFlower()
-        # if len(self.players) == 1 and self.gameMode == "pvp":
-        #    self.win = True
         self.broadLoadWorld()
         self.initLevel()
         reactor.callLater(1, self.broadStartTimer, self.server.startTimer)

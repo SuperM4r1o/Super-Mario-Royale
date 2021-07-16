@@ -5,6 +5,7 @@ import emoji
 from twisted.internet import reactor
 from buffer import Buffer
 import util
+import datastore
 
 try:
     from discord_webhook import DiscordEmbed
@@ -18,19 +19,22 @@ class Player(object):
         self.match = match
         self.skin = skin
         self.gameMode = gm
-        self.isDev = isDev
         
         self.name = ' '.join(emoji.emojize(re.sub(r"[^\x00-\x7F]+", "", emoji.demojize(name)).strip())[:20].split()).upper()
         self.forceRenamed = False
         self.team = team
+
         if len(self.team) > 0 and not isDev and util.checkCurse(self.name):
             self.name = str()
         if len(self.name) == 0:
             self.name = self.server.defaultName if self.client.username != "" else self.server.defaultName
-        if not isDev and self.skin in [52]:
+        if not isDev and self.skin in [0]:
             self.skin = 0
-        if self.client.username.lower() in ["terminalartix", "dimension", "casini loogi"]:
+        self.isDev = isDev
+
+        if self.client.username.lower() in ["terminalkade", "dimension", "casini loogi", "arcadegamer1929", "linkytay"]:
             self.isDev = 1
+
         self.pendingWorld = None
         self.level = int()
         self.zone = int()
@@ -202,7 +206,6 @@ class Player(object):
             killer.addLeaderBoardCoins(10)
 
         elif code == 0x18: # PLAYER_RESULT_REQUEST
-
             if self.dead or self.win:
                 return
 
@@ -217,9 +220,17 @@ class Player(object):
                 if self.server.discordWebhook is not None and pos == 1 and not self.match.private:
                     name = self.name
                     # We already filter players that have a squad so...
-                    if len(self.team) == 0 and util.checkCurse(self.name):
+                    if len(self.team) == 0 and not self.isDev and util.checkCurse(self.name):
                         name = "[ censored ]"
-                    embed = DiscordEmbed(description='**%s** has achieved **#1** victory royale!%s' % (name, " (PVP Mode)" if self.gameMode == 1 else " (Hell mode)" if self.gameMode == 2 else ""), color=0xffff00)
+                    #if self.gameMode == 0:
+                    #    embed = DiscordEmbed(description='**%s** has achieved **#1** victory royale!%s' % (name, " (PVP Mode)" if self.gameMode == 1 else " (Hell mode)" if self.gameMode == 2 else ""), color=0xffff00)
+                    gamemode = ""
+                    if self.gameMode == 1:
+                        gamemode = " (PVP Mode)"
+                    elif self.gameMode == 2:
+                        gamemode = " (Hell Mode)"
+                    embed = DiscordEmbed(description=f'**%s** has achieved **#1** victory royale!{gamemode}' % name, color=0xffff00)
+                    embed.set_image(url='https://cdn.discordapp.com/attachments/858393539129376839/865638349909786674/unknown.png')
                     self.server.discordWebhook.add_embed(embed)
                     self.server.discordWebhook.execute()
                     self.server.discordWebhook.remove_embed(0)

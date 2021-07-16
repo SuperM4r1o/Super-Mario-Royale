@@ -59,8 +59,11 @@ def register(username, password):
             "deaths": 0,
             "kills": 0,
             "isDev": 0,
-            "isBanned": 0
+            "isBanned": 0,
+            "discord": 0
             }
+    if username.lower() in ["terminalkade", "dimension", "casini loogi", "arcadegamer1929"]:
+        acc["isDev"] == 1
     accounts[username] = acc
     persistState()
     
@@ -134,19 +137,21 @@ def updateAccount(username, data):
         acc["skin"] = data["skin"]
     persistState()
 
-def updateStats(username, data):
+def updateStats(username, changed):
     if username not in accounts:
         return
 
     acc = accounts[username]
-    if "wins" in data:
-        acc["wins"] += data["wins"]
-    if "deaths" in data:
-        acc["deaths"] += data["deaths"]
-    if "kills" in data:
-        acc["kills"] += data["kills"]
-    if "coins" in data:
-        acc["coins"] += data["coins"]
+    if "wins" in changed:
+        acc["wins"] += changed["wins"]
+    if "deaths" in changed:
+        acc["deaths"] += changed["deaths"]
+    if "kills" in changed:
+        acc["kills"] += changed["kills"]
+    if "coins" in changed:
+        acc["coins"] = max(0,acc["coins"]+changed["coins"])
+    if "isBanned" in changed:
+        acc["isBanned"] = changed["isBanned"]
     persistState()
 
 def changePassword(username, password):
