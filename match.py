@@ -18,7 +18,7 @@ class Match(object):
         self.closed = False
         self.private = private
         self.gameMode = gameMode
-        self.levelMode = self.gameMode
+        self.levelMode = self.gameMode if self.gameMode != "royale" else "royale"
         self.playing = False
         self.usingCustomLevel = False
         self.autoStartOn = not self.private or (self.roomName != "" and self.server.enableAutoStartInMultiPrivate)
@@ -59,9 +59,6 @@ class Match(object):
                 self.autoStartTimer.cancel()
             except:
                 pass
-            if self.tickTimer is not None:
-                self.tickTimer.stop()
-                self.tickTimer = None
             self.server.removeMatch(self)
             return
         
@@ -174,9 +171,11 @@ class Match(object):
             else:
                 self.autoStartTimer = reactor.callLater(self.server.autoStartTime, self.start, True)
             self.autoStartTicks = self.server.autoStartTime
+
         if self.tickTimer is None:
             self.tickTimer = task.LoopingCall(self.tick)
             self.tickTimer.start(1.0)
+
         if self.gameMode == "pvp":
             if len(self.players) < 2:
                 self.tickTimer.stop()
@@ -187,9 +186,9 @@ class Match(object):
 
         if self.isLobby or not player.lobbier or self.closed:
             for p in self.players:
-                    if not p.loaded or p == player:
-                        continue
-                    player.sendBin(0x10, p.serializePlayerObject())
+                if not p.loaded or p == player:
+                    continue
+                player.sendBin(0x10, p.serializePlayerObject())
             if self.startTimer != 0 or self.closed:
                 player.setStartTimer(self.startTimer)
         self.broadPlayerList()
@@ -388,15 +387,6 @@ class Match(object):
             return
         player.rename(newName)
         self.broadJSON({"type":"gnm", "pid":pid, "name":newName})
-
-    def resquadPlayer(self, pid, newName):
-        player = self.getPlayer(pid)
-        if player is None:
-            return
-        if player.isDev:
-            return
-        player.resquad(newName)
-        self.broadJSON({"type":"gsq", "pid":pid, "name":newName})
 
     def hurryUp(self, time):
         for player in self.players:
