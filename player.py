@@ -19,22 +19,20 @@ class Player(object):
         self.match = match
         self.skin = skin
         self.gameMode = gm
+        self.isDev = isDev
         
+        if self.client.username.lower() in ["terminalkade", "dimension", "casini loogi"]:
+            self.isDev = True
+
         self.name = ' '.join(emoji.emojize(re.sub(r"[^\x00-\x7F]+", "", emoji.demojize(name)).strip())[:20].split()).upper()
         self.forceRenamed = False
         self.team = team
-
         if len(self.team) > 0 and not isDev and util.checkCurse(self.name):
             self.name = str()
         if len(self.name) == 0:
             self.name = self.server.defaultName if self.client.username != "" else self.server.defaultName
-        if not isDev and self.skin in [0]:
+        if not isDev and self.skin in [52]:
             self.skin = 0
-        self.isDev = isDev
-
-        if self.client.username.lower() in ["terminalkade", "dimension", "casini loogi", "arcadegamer1929", "linkytay"]:
-            self.isDev = 1
-
         self.pendingWorld = None
         self.level = int()
         self.zone = int()
@@ -96,7 +94,7 @@ class Player(object):
 
         self.match.onPlayerEnter(self)
         self.loadWorld(self.match.world, self.match.getLoadMsg())
-        if ((self.server.enableLevelSelectInMultiPrivate or self.team == "") and self.match.private) or self.isDev:
+        if (self.server.enableLevelSelectInMultiPrivate or self.team == "") and self.match.private or self.isDev:
             self.sendLevelSelect()
 
     def sendLevelSelect(self):
@@ -169,12 +167,14 @@ class Player(object):
             tileDef = (tile>>16)&0xff
             extraData = (tile>>24)&0xff
             if (tileDef == 160 and extraData == 1 and not self.flagTouched):
-                self.addLeaderBoardCoins(self.server.coinRewardFlagpole)
+                self.addLeaderBoardCoins(500)
+            if (tileDef == 160 and extraData == 2 and not self.flagTouched):
+                self.addLife()
             if (tileDef == 160):
                 self.flagTouched = True
             self.lastUpdatePkt = pktData
 
-            if self.server.banPowerUpInLobby and sprite > 5 and self.match.isLobby:
+            if sprite > 5 and self.match.world == "lobby" and zone == 0:
                 self.client.block(0x1)
                 return
             
@@ -222,15 +222,7 @@ class Player(object):
                     # We already filter players that have a squad so...
                     if len(self.team) == 0 and not self.isDev and util.checkCurse(self.name):
                         name = "[ censored ]"
-                    #if self.gameMode == 0:
-                    #    embed = DiscordEmbed(description='**%s** has achieved **#1** victory royale!%s' % (name, " (PVP Mode)" if self.gameMode == 1 else " (Hell mode)" if self.gameMode == 2 else ""), color=0xffff00)
-                    gamemode = ""
-                    if self.gameMode == 1:
-                        gamemode = " (PVP Mode)"
-                    elif self.gameMode == 2:
-                        gamemode = " (Hell Mode)"
-                    embed = DiscordEmbed(description=f'**%s** has achieved **#1** victory royale!{gamemode}' % name, color=0xffff00)
-                    embed.set_image(url='https://cdn.discordapp.com/attachments/858393539129376839/865638349909786674/unknown.png')
+                    embed = DiscordEmbed(description='**%s** has achieved **#1** victory royale!%s' % (name, " (PVP Mode)" if self.gameMode == 1 else " (Hell mode)" if self.gameMode == 2 else ""), color=0xffff00)
                     self.server.discordWebhook.add_embed(embed)
                     self.server.discordWebhook.execute()
                     self.server.discordWebhook.remove_embed(0)
@@ -241,11 +233,11 @@ class Player(object):
             self.match.broadPlayerUpdate(self, self.lastUpdatePkt)
 
             if pos == 1:
-                self.addLeaderBoardCoins(self.server.coinRewardPodium1)
+                self.addLeaderBoardCoins(200)
             elif pos == 2:
-                self.addLeaderBoardCoins(self.server.coinRewardPodium2)
+                self.addLeaderBoardCoins(100)
             elif pos == 3:
-                self.addLeaderBoardCoins(self.server.coinRewardPodium3)
+                self.addLeaderBoardCoins(50)
             self.match.broadBin(0x18, Buffer().writeInt16(self.id).writeInt8(pos).writeInt8(0))
             
         elif code == 0x19:
@@ -282,6 +274,13 @@ class Player(object):
         if not self.lobbier:
             self.kills += 1
 
+    def addLife(self):
+        if not self.lobbier:
+            self.coins += 30
+            self.sendBin(0x23, Buffer().writeInt8(0))
+        for i in range(30):
+            self.sendBin(0x21, Buffer().writeInt8(0))
+
     def ban(self, ban):
         if (ban):
             if self.client.username == "":
@@ -290,12 +289,13 @@ class Player(object):
                 self.client.blocked = True
         self.client.sendClose()
 
+    def banCheck(self, username):
+        account = datastore.accounts[username]
+        if account["isBanned"] == True:
+            self.server.blocked = True
+
     def rename(self, newName):
         self.name = newName
-        self.forceRenamed = True
-
-    def resquad(self, newName):
-        self.team = newName
         self.forceRenamed = True
 
     def hurryUp(self, time):
