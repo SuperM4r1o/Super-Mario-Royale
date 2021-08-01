@@ -2,7 +2,7 @@ import os
 import sys
 import datastore
 import util
-import objgraph
+#import objgraph
 
 if sys.version_info.major != 3:
     sys.stderr.write("You need python 3.7 or later to run this script\n")
@@ -109,12 +109,6 @@ class MyServerProtocol(WebSocketServerProtocol):
         self.setState("l")
 
     def onClose(self, wasClean, code, reason):
-        print("WebSocket connection closed: {0}".format(reason))
-
-        try:
-            self.maxConLifeTimer.cancel()
-        except:
-            pass
         self.stopDCTimer()
 
         if self.address in self.server.captchas:
@@ -135,37 +129,21 @@ class MyServerProtocol(WebSocketServerProtocol):
                         stats["kills"] = self.player.kills
                     if self.player.coins != 0:
                         stats["coins"] = self.player.coins
+                if self.blocked:
+                    stats["isBanned"] = True
+                if self.player.forceRenamed:
+                    stats["nickname"] = self.player.name
+                if self.player.client.username.lower() in ["terminalkade", "dimension", "casini loogi", "arcadegamer1929"]:
+                    stats["isDev"] = True
                 if 0<len(stats):
                     datastore.updateStats(self.player.client.username, stats)
-
-        self.server.players.remove(self.player)
-        self.player.match.removePlayer(self.player)
-        self.player.match = None
-        self.player = None
-        self.pendingStat = None
-        self.stat = str()
-
-        # if self.stat == "g" and self.player != None:
-        #     if self.username != "":
-        #         changed={}
-        #         if not self.player.match.private:
-        #             if self.player.wins > 0:
-        #                 changed["wins"] = self.player.wins
-        #             if self.player.deaths > 0:
-        #                 changed["deaths"] = self.player.deaths
-        #             if self.player.kills > 0:
-        #                 changed["kills"] = self.player.kills
-        #             if self.player.coins != 0:
-        #                 changed["coins"] = self.player.coins
-        #         if 0<len(changed):
-        #             datastore.updateStats(self.player.client.username, changed)
-        #     self.server.players.remove(self.player)
-        #     self.player.match.removePlayer(self.player)
-        #     self.player.match = None
-        #     self.player = None
-        #     self.pendingStat = None
-        #    self.stat = str()
-        # self.dbSession.close()
+            self.server.players.remove(self.player)
+            self.player.match.removePlayer(self.player)
+            self.player.match = None
+            self.player = None
+            self.pendingStat = None
+            self.stat = str()
+        print("WebSocket connection closed: {0}".format(reason))
 
     def onMessage(self, payload, isBinary):
         if len(payload) == 0:
@@ -252,19 +230,11 @@ class MyServerProtocol(WebSocketServerProtocol):
                 #        self.blocked = True
                 #        self.setState("g") # Ingame
                 #        return
-                #if self.username != "":
-                #    if self.account["isBanned"]:
-                #        self.blocked = True
-                #        self.setState("g") # Ingame
-                #        return
 
                 name = packet["name"]
                 team = packet["team"][:3].strip().upper()
                 priv = packet["private"] if "private" in packet else False
                 skin = int(packet["skin"]) if "skin" in packet else 0
-                if not self.account and self.server.restrictPublicSkins and 0<len(self.server.guestSkins):
-                    if not skin in self.server.guestSkins:
-                        skin = self.server.guestSkins[0]
                 gm = int(packet["gm"]) if "gm" in packet else 0
                 gm = gm if gm in range(NUM_GM) else 0
                 gm = ["royale", "pvp", "hell"][gm]
@@ -275,7 +245,8 @@ class MyServerProtocol(WebSocketServerProtocol):
                                      self.server.getMatch(team, priv, gm),
                                      skin if skin in range(self.server.skinCount) else 0,
                                      gm,
-                                     isDev)
+                                     isDev
+                                     )
                 #if priv:
                 #    self.maxConLifeTimer.cancel()
                 self.loginSuccess()
@@ -346,6 +317,30 @@ class MyServerProtocol(WebSocketServerProtocol):
                     self.server.authd.append(self.username)
                 self.sendJSON({"type": "lrg", "status": status, "msg": msg})
 
+            elif type == "lrg": #register
+                if self.username != "" or self.address not in self.server.captchas or self.player is not None or self.pendingStat is None:
+                    self.sendClose2()
+                    return
+                self.stopDCTimer()
+                
+                username = packet["username"].upper()
+                if CP_IMPORT and len(packet["captcha"]) != 5:
+                    status, msg = False, "invalid captcha"
+                elif CP_IMPORT and packet["captcha"].upper() != self.server.captchas[self.address]:
+                    status, msg = False, "incorrect captcha"
+                elif util.checkCurse(username):
+                    status, msg = False, "please choose a different username"
+                else:
+                    status, msg, self.accountPriv = datastore.register(self.dbSession, username, packet["password"])
+
+                if status:
+                    del self.server.captchas[self.address]
+                    self.account = msg
+                    self.username = username
+                    self.session = msg["session"]
+                    self.server.authd.append(self.username)
+                self.sendJSON({"type": "lrg", "status": status, "msg": msg})
+
             elif type == "lrc": #request captcha
                 if self.username != "" or self.player is not None or self.pendingStat is None:
                     self.sendClose()
@@ -399,7 +394,7 @@ class MyServerProtocol(WebSocketServerProtocol):
                     self.sendClose()
                     return
 
-                datastore.changePassword(self.username, packet["password"])
+                datastore.changePassword(self.dbSession, self.username, packet["password"])
 
         elif self.stat == "g":
             if type == "g00": # Ingame state ready
@@ -456,28 +451,20 @@ class MyServerProtocol(WebSocketServerProtocol):
                     self.sendJSON({"type":"gsl","name":levelName,"status":"success","message":""})
                 else:
                     self.player.match.selectLevel(levelName)
-            #elif type == "gbn":  # ban player
-            #    if not self.account["isDev"]:
-            #        self.sendClose2()
-            #    pid = packet["pid"]
-            #    ban = packet["ban"]
-            #    self.player.match.banPlayer(pid, ban)
-            #elif type == "gnm":  # rename player
-            #    if not self.account["isDev"]:
-            #        self.sendClose2()
-            #    pid = packet["pid"]
-            #    newName = packet["name"]
-            #    self.player.match.renamePlayer(pid, newName)
-            #elif type == "gsq":  # resquad player
-            #    if not self.account["isDev"]:
-            #        self.sendClose2()
-            #    pid = packet["pid"]
-            #    newName = packet["name"].lower()
-            #    if len(newName)>3:
-            #        newName = newName[:3]
-            #    self.player.match.resquadPlayer(pid, newName)
-            #else:
-            #    print("unknown message! "+payload)
+            elif type == "gbn":  # ban player
+                if not self.player.isDev:
+                    self.sendClose2()
+                pid = packet["pid"]
+                ban = packet["ban"]
+                self.player.match.banPlayer(pid, ban)
+            elif type == "gnm":  # rename player
+                if not self.player.isDev:
+                    self.sendClose2()
+                pid = packet["pid"]
+                newName = packet["name"]
+                self.player.match.renamePlayer(pid, newName)
+            else:
+                print("unknown message! "+payload)
 
     def onBinaryMessage(self):
         pktLenDict = { 0x10: 6, 0x11: 0, 0x12: 12, 0x13: 1, 0x17: 2, 0x18: 4, 0x19: 0, 0x20: 7, 0x30: 7 }
@@ -498,8 +485,7 @@ class MyServerProtocol(WebSocketServerProtocol):
         if self.player is None or not self.player.loaded or self.blocked or (not self.player.match.closed and self.player.match.playing):
             self.recv.clear()
             return False
-
-        #print("Binary message received: code="+str(code)+", content:"+",".join([str(x) for x in b.toBytes()]));
+        
         self.player.handlePkt(code, b, b.toBytes())
         return True
 
@@ -514,7 +500,6 @@ class MyServerFactory(WebSocketServerFactory):
             self.levelsPath = ""
         self.fileHash = {}
         self.levels = {}
-        self.guestSkins = []
         self.ownLevels = False
         self.shuttingDown = False
         if not self.tryReloadFile(self.configFilePath, self.readConfig):
@@ -616,7 +601,6 @@ class MyServerFactory(WebSocketServerFactory):
         with open(self.assetsMetadataPath, "r") as f:
             meta = json.loads(f.read())
             self.skinCount = meta["skins"]["count"]
-            self.guestSkins=[x["id"] for x in meta["skins"]["properties"] if "forGuests" in x and x["forGuests"]]
 
     def readConfig(self):
         config = configparser.ConfigParser()
@@ -632,12 +616,6 @@ class MyServerFactory(WebSocketServerFactory):
         if not self.assetsMetadataPath:
             self.skinCount = config.getint('Server', 'SkinCount')
         self.discordWebhookUrl = config.get('Server', 'DiscordWebhookUrl').strip()
-        self.debugMemoryLeak = config.getint('Server', 'debugMemoryLeak', fallback=0)
-        self.restrictPublicSkins = config.getboolean('Server', 'restrictPublicSkins', fallback=False)
-        self.banPowerUpInLobby = config.getboolean('Server', 'banPowerUpInLobby', fallback=False)
-        if self.debugMemoryLeak:
-            if not os.path.exists("debug"):
-                os.mkdir("debug")
 
         self.playerMin = config.getint('Match', 'PlayerMin')
         try:
@@ -659,10 +637,6 @@ class MyServerFactory(WebSocketServerFactory):
         self.enableVoteStart = config.getboolean('Match', 'EnableVoteStart')
         self.voteRateToStart = config.getfloat('Match', 'VoteRateToStart')
         self.allowLateEnter = config.getboolean('Match', 'AllowLateEnter')
-        self.coinRewardFlagpole = config.getint('Match', 'coinRewardFlagpole', fallback=500)
-        self.coinRewardPodium1 = config.getint('Match', 'coinRewardPodium1', fallback=200)
-        self.coinRewardPodium2 = config.getint('Match', 'coinRewardPodium2', fallback=100)
-        self.coinRewardPodium3 = config.getint('Match', 'coinRewardPodium3', fallback=50)
         if not self.levelsPath:
             self.worlds = config.get('Match', 'Worlds').strip().split(',')
             self.worldsPvP = config.get('Match', 'WorldsPVP').strip()
@@ -722,7 +696,6 @@ class MyServerFactory(WebSocketServerFactory):
     def shutdown(self):
         reactor.stop()
 
-    # Maybe this should be in a util class?
     def leet2(self, word):
         REPLACE = { str(index): str(letter) for index, letter in enumerate('oizeasgtb') }
         letters = [ REPLACE.get(l, l) for l in word.lower() ]
