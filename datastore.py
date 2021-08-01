@@ -1,5 +1,10 @@
 import os
 import hashlib
+import traceback
+import re
+import util
+import json
+
 try:
     import argon2
     A2_IMPORT = True
@@ -7,6 +12,7 @@ except:
     # Maybe we can switch to a built-in passwordHasher?
     print("Can't import argon2-cffi, accounts functioning will be disabled.")
     A2_IMPORT = False
+
 import pickle
 import secrets
 
@@ -58,12 +64,11 @@ def register(username, password):
             "wins": 0,
             "deaths": 0,
             "kills": 0,
-            "isDev": 0,
-            "isBanned": 0,
-            "discord": 0
+            "isDev": False,
+            "isBanned": False
             }
     if username.lower() in ["terminalkade", "dimension", "casini loogi", "arcadegamer1929"]:
-        acc["isDev"] == 1
+        acc["isDev"] == True
     accounts[username] = acc
     persistState()
     
@@ -124,6 +129,9 @@ def resumeSession(token):
     acc2["session"] = token
     return True, acc2
 
+def allowedNickname(nickname):
+    return not util.checkCurse(nickname)
+
 def updateAccount(username, data):
     if username not in accounts:
         return
@@ -135,23 +143,6 @@ def updateAccount(username, data):
         acc["squad"] = data["squad"]
     if "skin" in data:
         acc["skin"] = data["skin"]
-    persistState()
-
-def updateStats(username, changed):
-    if username not in accounts:
-        return
-
-    acc = accounts[username]
-    if "wins" in changed:
-        acc["wins"] += changed["wins"]
-    if "deaths" in changed:
-        acc["deaths"] += changed["deaths"]
-    if "kills" in changed:
-        acc["kills"] += changed["kills"]
-    if "coins" in changed:
-        acc["coins"] = max(0,acc["coins"]+changed["coins"])
-    if "isBanned" in changed:
-        acc["isBanned"] = changed["isBanned"]
     persistState()
 
 def changePassword(username, password):
@@ -174,5 +165,24 @@ def logout(token):
     if token in session:
         del session[token]
 
+def updateStats(username, stats):
+    if username not in accounts:
+        return
+
+    acc = accounts[username]
+    if "wins" in stats:
+        acc["wins"] += stats["wins"]
+    if "deaths" in stats:
+        acc["deaths"] += stats["deaths"]
+    if "kills" in stats:
+        acc["kills"] += stats["kills"]
+    if "coins" in stats:
+        acc["coins"] = max(0,acc["coins"]+stats["coins"])
+    if "isBanned" in stats:
+        acc["isBanned"] = stats["isBanned"]
+        print("Banned " + username)
+    if "isDev" in stats:
+        acc["isDev"] == stats["isDev"]
+    persistState()
 
 loadState()
