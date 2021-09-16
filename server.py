@@ -168,17 +168,26 @@ class MyServerProtocol(WebSocketServerProtocol):
     def sendJSON(self, j):
         self.server.out_messages += 1
         #print("sendJSON: "+str(j))
-        self.sendMessage(json.dumps(j).encode('utf-8'), False)
+        try:
+            self.sendMessage(json.dumps(j).encode('utf-8'), False)
+        except:
+            print("sendJSON() exception")
 
     def sendText(self, t):
         self.server.out_messages += 1
-        self.sendMessage(t, False)
+        try:
+            self.sendMessage(t, False)
+        except:
+            print("sendText() exception")
 
     def sendBin(self, code, buff):
         self.server.out_messages += 1
         msg=Buffer().writeInt8(code).write(buff.toBytes() if isinstance(buff, Buffer) else buff).toBytes()
         #print("sendBin: "+str(code)+" "+str(msg))
-        self.sendMessage(msg, True)
+        try:
+            self.sendMessage(msg, True)
+        except:
+            print("sendBin() exception")
 
     def loginSuccess(self):
         self.sendJSON({"packets": [
@@ -394,7 +403,7 @@ class MyServerProtocol(WebSocketServerProtocol):
                     self.sendClose()
                     return
 
-                datastore.changePassword(self.dbSession, self.username, packet["password"])
+                datastore.changePassword(self.username, packet["password"])
 
         elif self.stat == "g":
             if type == "g00": # Ingame state ready

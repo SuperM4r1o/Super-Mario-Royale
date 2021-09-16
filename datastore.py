@@ -18,7 +18,6 @@ import secrets
 
 accounts = {}
 session = {}
-loggedInSession = {}
 
 if A2_IMPORT:
     ph = argon2.PasswordHasher()
@@ -159,6 +158,8 @@ def changePassword(username, password):
 
     acc["salt"] = salt
     acc["pwdhash"] = pwdhash
+
+    print(acc, password)
     persistState()
 
 def logout(token):
@@ -183,6 +184,8 @@ def updateStats(username, stats):
         print("Banned " + username)
     if "isDev" in stats:
         acc["isDev"] == stats["isDev"]
+
+    print(session)
     persistState()
 
 loadState()

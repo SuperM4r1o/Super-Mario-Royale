@@ -18,7 +18,7 @@ class Match(object):
         self.closed = False
         self.private = private
         self.gameMode = gameMode
-        self.levelMode = self.gameMode if self.gameMode != "royale" else "royale"
+        self.levelMode = self.gameMode
         self.playing = False
         self.usingCustomLevel = False
         self.autoStartOn = not self.private or (self.roomName != "" and self.server.enableAutoStartInMultiPrivate)
@@ -178,8 +178,11 @@ class Match(object):
 
         if self.gameMode == "pvp":
             if len(self.players) < 2:
-                self.tickTimer.stop()
-                self.tickTimer = 0
+                try:
+                    self.tickTimer.stop()
+                    self.tickTimer = 0
+                except AttributeError:
+                    print("AttributeError: self.tickTimer.stop()")
             else:
                 self.tickTimer = task.LoopingCall(self.tick)
                 self.tickTimer.start(1.0)
