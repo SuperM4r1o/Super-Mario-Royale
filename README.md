@@ -22,4 +22,4 @@ This project uses Python <b>3.7</b> and the following dependencies:
 <b>If you are on Windows, the module <u>pypiwin32</u> may also be required.</b> 
 
 ## Tutorial
-An official tutorial to hosting is available [here](https://github.com/mroyale/mroyale-server/master/blob/TUTORIAL.md)!
+An official tutorial to hosting is available [here](https://github.com/mroyale/mroyale-server/blob/master/TUTORIAL.md)!
