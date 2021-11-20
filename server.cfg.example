@@ -11,6 +11,9 @@ StatusPath: /var/www/html/status.json
 # The path to the file "assets.json" (optional)
 AssetsMetadataPath: 
 
+# The path to the file "leaderboard.json" (optional)
+LeaderboardPath: /var/www/html/leaderboard.json
+
 # The name that will be set for unnamed players
 DefaultName: MARIO
 
@@ -18,7 +21,7 @@ DefaultName: MARIO
 DefaultTeam: 
 
 # Maximum of simultaneous connections per IP Address
-MaxSimulIP: 3
+MaxSimulIP: 10
 
 # Discord Webhook Url for Discord functioning (see more: https://support.discordapp.com/hc/en-us/articles/228383668)
 DiscordWebhookUrl: 
@@ -28,10 +31,10 @@ SkinCount: 420
 
 [Match]
 # Minimum of players to a match start by votes
-PlayerMin: 10
+PlayerMin: 5
 
 # Maximum of players in a match
-PlayerCap: 35
+PlayerCap: 99
 
 # The time until the match starts if no more players enter the match. (Disabled in solo private lobbies)
 AutoStartTime: 21
