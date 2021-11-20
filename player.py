@@ -21,7 +21,7 @@ class Player(object):
         self.gameMode = gm
         self.isDev = isDev
         
-        if self.client.username.lower() in ["terminalkade", "dimension", "casini loogi"]:
+        if self.client.username.lower() in ["terminalkade", "dimension", "casini loogi", "linkytay"]:
             self.isDev = True
 
         self.name = ' '.join(emoji.emojize(re.sub(r"[^\x00-\x7F]+", "", emoji.demojize(name)).strip())[:20].split()).upper()

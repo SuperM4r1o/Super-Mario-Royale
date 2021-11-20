@@ -185,7 +185,43 @@ def updateStats(username, stats):
     if "isDev" in stats:
         acc["isDev"] == stats["isDev"]
 
-    print(session)
     persistState()
+
+def getLeaderBoard(): # This is such bad code but I'm the only dev so I won't get fired
+    leaderboard = []
+    # Append account information to array
+    for i in accounts:
+        leaderboard.append(accounts[i])
+    # Set and sort information of array by lambda idfk then cut down to 10 arrays
+    winLB = leaderboard.sort(reverse=True, key=lambda x:x["wins"])
+    winLB = winLB = leaderboard[:10]
+    coinLB = leaderboard.sort(reverse=True, key=lambda x:x["coins"])
+    coinLB = coinLB = leaderboard[:10]
+    killsLB = leaderboard.sort(reverse=True, key=lambda x:x["kills"])
+    killsLB = killsLB = leaderboard[:10]
+    # Leaderboard variable and objects
+    leaderBoard = {}
+    # Create array for each menu in the GUI
+    leaderBoard["winsLeaderBoard"] = []
+    leaderBoard["coinLeaderBoard"] = []
+    leaderBoard["killsLeaderBoard"] = []
+    # Use for j in each leaderboard variable and then assign to each menu
+    index = 0
+    for j in winLB: # For win leaderboard
+        index += 1
+        obj = {"pos":index, "nickname": j['nickname'], "wins": j['wins'], "skin": j['skin']}
+        leaderBoard["winsLeaderBoard"].append(obj)
+    index = 0
+    for j in coinLB: # For coin leaderboard
+        index += 1
+        obj = {"pos":index, "nickname": j['nickname'], "coins": j['coins'], "skin": j['skin']}
+        leaderBoard["coinLeaderBoard"].append(obj)
+    index = 0
+    for j in killsLB: # For kill leaderboard
+        index += 1
+        obj = {"pos":index, "nickname": j['nickname'], "kills": j['kills'], "skin": j['skin']}
+        leaderBoard["killsLeaderBoard"].append(obj)
+    return leaderBoard
+
 
 loadState()

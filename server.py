@@ -144,6 +144,8 @@ class MyServerProtocol(WebSocketServerProtocol):
             self.pendingStat = None
             self.stat = str()
         print("WebSocket connection closed: {0}".format(reason))
+        MyServerFactory.updateLeaderBoard()
+        
 
     def onMessage(self, payload, isBinary):
         if len(payload) == 0:
@@ -439,9 +441,10 @@ class MyServerProtocol(WebSocketServerProtocol):
                 self.player.voted = True
                 self.player.match.voteStart()
 
-            elif type == "g51": # (SPECIAL) Force start
-                if self.server.mcode and self.server.mcode in packet["code"]:
-                    self.player.match.start(True)
+            elif type == "g51": # (SPECIAL) Force start 
+                if not self.player.isDev:
+                    self.sendClose2()
+                self.player.match.start(True)
             
             elif type == "gsl":  # Level select
                 if self.player is None or ((not self.server.enableLevelSelectInMultiPrivate and self.player.team != "") or not self.player.match.private) and not self.player.isDev:
@@ -560,6 +563,16 @@ class MyServerFactory(WebSocketServerFactory):
 
         reactor.callLater(5, self.generalUpdate)
 
+        l = task.LoopingCall(self.updateLeaderBoard)
+        l.start(60.0)
+
+    def updateLeaderBoard(self):
+        if self.leaderBoardPath != '':
+            print("Updating leader board at "+self.leaderBoardPath)
+            leaderBoard = datastore.getLeaderBoard()
+            with open(self.leaderBoardPath, "w") as f:
+                f.write(json.dumps(leaderBoard))
+
     def reloadLevel(self, level):
         fullPath = os.path.join(self.levelsPath, level)
         try:
@@ -619,6 +632,7 @@ class MyServerFactory(WebSocketServerFactory):
         self.mcode = config.get('Server', 'MCode').strip()
         self.statusPath = config.get('Server', 'StatusPath').strip()
         self.assetsMetadataPath = config.get('Server', 'AssetsMetadataPath').strip()
+        self.leaderBoardPath = config.get('Server', 'LeaderboardPath', fallback='').strip()
         self.defaultName = config.get('Server', 'DefaultName').strip()
         self.defaultTeam = config.get('Server', 'DefaultTeam').strip()
         self.maxSimulIP = config.getint('Server', 'MaxSimulIP')
