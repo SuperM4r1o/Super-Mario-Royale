@@ -17,7 +17,7 @@ After that rename `server.cfg.example` to `server.cfg` (If you'd like, you can s
 If you don't plan on using TLS go to the last few lines in `server.py` and change the `reactor.listenSSL(factory.listenPort, factory, contextFactory)` line to `reactor.listenTCP(factory.listenPort, factory)`
 
 ## Client
-To setup the client, just install nginx/Apache and paste the client files in there, if you've changed the port then change it in `/js/server.js`, and you'll be done.
+To setup the client, just install nginx/Apache and paste the client files in the main directory (`/var/www/html` by default on Debian-based systems), if you've changed the port then change it in `/js/server.js`, and you'll be done.
 
 ## End
 Run `server.py` in the `mroyale-server` directory, and if all has gone well, you have successfully setup your very own Mario Royale self host.
