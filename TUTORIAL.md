@@ -12,7 +12,7 @@ To clone the client, use this command: `git clone https://github.com/mroyale/mro
 To clone the server, use this command: `git clone https://github.com/mroyale/mroyale-server.git`
 
 ## Setup
-Once you've cloned both, `cd` to `mroyale-server`, then install the dependencies listen in the README file.<br>
+Once you've cloned both, `cd` to `mroyale-server`, then install the dependencies listed in the README file.<br>
 After that rename `server.cfg.example` to `server.cfg` (If you'd like, you can setup or change some values there too).<br>
 If you don't plan on using TLS go to the last few lines in `server.py` and change the `reactor.listenSSL(factory.listenPort, factory, contextFactory)` line to `reactor.listenTCP(factory.listenPort, factory)`
 
