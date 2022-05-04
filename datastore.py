@@ -171,22 +171,12 @@ def updateAccount(username, data):
         acc["skin"] = data["skin"]
     persistState()
 
-def removesomeskins():
-    acc = accounts["TERMINALKADE"]["skins"]
-    print(acc)
-    acc.pop(28)
-    print(acc)
-    persistState()
-
 def validateSkin(username, skin):
     if username not in accounts:
         # Simple, if the username doesn't exist, use the guest method of validating skins
         return validateSkinGuest(skin)
 
     acc = accounts[username]["skins"]
-
-    if skin == "_secret" and username.upper() in ["TERMINALKADE"]:
-        return "_secret"
 
     if skin not in acc:
         return 0
