@@ -4,6 +4,7 @@ import traceback
 import re
 import util
 import json
+import requests
 
 try:
     import argon2
@@ -37,6 +38,16 @@ def persistState():
     with open("server.dat", "wb") as f:
         pickle.dump(accounts, f)
 
+def resetLeaderboardCoins():
+    for i in accounts:
+        accounts[i]["coins"] = 0
+    print("Reset all coins\n" + str(accounts["TERMINALKADE"]["coins"]))
+
+def resetOwned():
+    for i in accounts:
+        accounts[i]["skins"] = [0, 1]
+    print("Reset skins (OWNED)")
+
 def register(username, password):
     if ph is None:
         return False, "account system disabled"
@@ -58,6 +69,7 @@ def register(username, password):
             "pwdhash": pwdhash,
             "nickname": username,
             "skin": 0,
+            "skins": [0, 1],
             "squad": "",
             "coins": 0,
             "wins": 0,
@@ -96,12 +108,16 @@ def login(username, password):
     if username not in accounts:
         return False, invalidMsg
     acc = accounts[username]
+
     
     try:
         ph.verify(acc["pwdhash"], password.encode('utf-8')+acc["salt"])
     except:
         return False, invalidMsg
     
+    if "skins" not in acc:
+        acc["skins"] = [0, 1]
+
     acc2 = acc.copy()
     del acc2["salt"]
     del acc2["pwdhash"]
@@ -119,6 +135,10 @@ def resumeSession(token):
     if username not in accounts:
         return False, "invalid user name or password"
     acc = accounts[username]
+
+
+    if "skins" not in acc:
+        acc["skins"] = [0, 1]
     
     acc2 = acc.copy()
     del acc2["salt"]
@@ -127,6 +147,13 @@ def resumeSession(token):
     acc2["username"] = username
     acc2["session"] = token
     return True, acc2
+
+def returnCoins(username):
+    if username not in accounts:
+        return
+
+    acc = accounts[username]["coins"]
+    return acc
 
 def allowedNickname(nickname):
     return not util.checkCurse(nickname)
@@ -143,6 +170,58 @@ def updateAccount(username, data):
     if "skin" in data:
         acc["skin"] = data["skin"]
     persistState()
+
+def removesomeskins():
+    acc = accounts["TERMINALKADE"]["skins"]
+    print(acc)
+    acc.pop(28)
+    print(acc)
+    persistState()
+
+def validateSkin(username, skin):
+    if username not in accounts:
+        # Simple, if the username doesn't exist, use the guest method of validating skins
+        return validateSkinGuest(skin)
+
+    acc = accounts[username]["skins"]
+
+    if skin == "_secret" and username.upper() in ["TERMINALKADE"]:
+        return "_secret"
+
+    if skin not in acc:
+        return 0
+    else:
+	    return skin
+
+def validateSkinGuest(skin):
+    # Guests cannot use skins with an ID over 1 (Luigi), so if it's higher than that, then return a value of zero, aka default to Mario from the get go
+    if skin > 1:
+        return 0
+
+    return skin
+
+def purchaseSkin(username, data):
+    if username not in accounts:
+        return
+
+    acc = accounts[username]
+    if data["skin"] not in acc["skins"]:
+        acc["skins"].append(data["skin"])
+
+        if int(data["coins"]) > int(acc["coins"]):
+            return
+
+        acc["coins"] = max(0,acc["coins"] - data["coins"])
+
+    persistState()
+
+def getSkinData(username):
+    if username not in accounts:
+        return False, False
+
+    # Get skin data and coins
+    acc = accounts[username]
+    return acc["coins"], acc["skins"]
 
 def changePassword(username, password):
     if username not in accounts:

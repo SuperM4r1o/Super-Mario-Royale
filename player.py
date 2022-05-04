@@ -20,8 +20,10 @@ class Player(object):
         self.skin = skin
         self.gameMode = gm
         self.isDev = isDev
+
+        self.skin = datastore.validateSkin(self.client.username.upper(), skin)
         
-        if self.client.username.lower() in ["terminalkade", "dimension", "casini loogi", "linkytay"]:
+        if self.client.username.lower() in ["terminalkade", "dimension", "casini loogi", "invader"]:
             self.isDev = True
 
         self.name = ' '.join(emoji.emojize(re.sub(r"[^\x00-\x7F]+", "", emoji.demojize(name)).strip())[:20].split()).upper()
@@ -31,8 +33,6 @@ class Player(object):
             self.name = str()
         if len(self.name) == 0:
             self.name = self.server.defaultName if self.client.username != "" else self.server.defaultName
-        if not isDev and self.skin in [52]:
-            self.skin = 0
         self.pendingWorld = None
         self.level = int()
         self.zone = int()
@@ -167,7 +167,7 @@ class Player(object):
             tileDef = (tile>>16)&0xff
             extraData = (tile>>24)&0xff
             if (tileDef == 160 and extraData == 1 and not self.flagTouched):
-                self.addLeaderBoardCoins(500)
+                self.addLeaderBoardCoins(20)
             if (tileDef == 160 and extraData == 2 and not self.flagTouched):
                 self.addLife()
             if (tileDef == 160):
@@ -203,7 +203,7 @@ class Player(object):
 
             killer.addKill()
             killer.sendBin(0x17, Buffer().writeInt16(self.id).write(pktData))
-            killer.addLeaderBoardCoins(10)
+            killer.addLeaderBoardCoins(30)
 
         elif code == 0x18: # PLAYER_RESULT_REQUEST
             if self.dead or self.win:
@@ -233,11 +233,11 @@ class Player(object):
             self.match.broadPlayerUpdate(self, self.lastUpdatePkt)
 
             if pos == 1:
-                self.addLeaderBoardCoins(200)
-            elif pos == 2:
                 self.addLeaderBoardCoins(100)
-            elif pos == 3:
+            elif pos == 2:
                 self.addLeaderBoardCoins(50)
+            elif pos == 3:
+                self.addLeaderBoardCoins(25)
             self.match.broadBin(0x18, Buffer().writeInt16(self.id).writeInt8(pos).writeInt8(0))
             
         elif code == 0x19:

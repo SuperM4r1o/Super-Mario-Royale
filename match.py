@@ -331,15 +331,16 @@ class Match(object):
         level, zone, oid, type = b.readInt8(), b.readInt8(), b.readInt32(), b.readInt8()
         allcoins = self.allcoins[level][zone]
         if oid in allcoins:
+            player.addCoin()
             coins = self.coins[level][zone]
             if not oid in coins:
                 return
-            player.addCoin()
+            
             coins.remove(oid)
         if oid in self.powerups:
             powerup = self.powerups[oid]
             if powerup["type"] == 100:
-                player.addLeaderBoardCoins(50000)
+                player.addLeaderBoardCoins(500)
             del self.powerups[oid]
 
         self.broadBin(0x20, Buffer().writeInt16(player.id).write(pktData))

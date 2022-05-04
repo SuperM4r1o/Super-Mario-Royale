@@ -11,7 +11,6 @@ StatusPath: /var/www/html/status.json
 # The path to the file "assets.json" (optional)
 AssetsMetadataPath: 
 
-# The path to the file "leaderboard.json" (optional)
 LeaderboardPath: /var/www/html/leaderboard.json
 
 # The name that will be set for unnamed players
@@ -58,6 +57,7 @@ VoteRateToStart: 0.85
 AllowLateEnter: 0
 
 # The game's worlds, if you don't know what you're doing, do not change it / Ignored if levels directory present
+# Example usage: world-1,world-l1,world-p
 Worlds: 
 
 # The gameMode PVP worlds / Ignored if levels directory present

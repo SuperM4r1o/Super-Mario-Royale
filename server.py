@@ -11,6 +11,8 @@ if sys.version_info.major != 3:
         input()
     exit(1)
 
+
+
 from twisted.python import log
 from twisted.internet import task, ssl
 log.startLogging(sys.stdout)
@@ -33,6 +35,7 @@ try:
 except:
     print("Can't import captcha, captcha functioning will be disabled.")
     CP_IMPORT = False
+
 
 from autobahn.twisted.websocket import WebSocketServerProtocol, WebSocketServerFactory
 from twisted.internet.protocol import Factory
@@ -143,8 +146,7 @@ class MyServerProtocol(WebSocketServerProtocol):
             self.player = None
             self.pendingStat = None
             self.stat = str()
-        print("WebSocket connection closed: {0}".format(reason))
-        MyServerFactory.updateLeaderBoard()
+        # print("WebSocket connection closed: {0}".format(reason))
         
 
     def onMessage(self, payload, isBinary):
@@ -245,7 +247,7 @@ class MyServerProtocol(WebSocketServerProtocol):
                 name = packet["name"]
                 team = packet["team"][:3].strip().upper()
                 priv = packet["private"] if "private" in packet else False
-                skin = int(packet["skin"]) if "skin" in packet else 0
+                skin = packet["skin"] if "skin" in packet else 0
                 gm = int(packet["gm"]) if "gm" in packet else 0
                 gm = gm if gm in range(NUM_GM) else 0
                 gm = ["royale", "pvp", "hell"][gm]
@@ -254,7 +256,7 @@ class MyServerProtocol(WebSocketServerProtocol):
                                      name,
                                      (team if (team != "" or priv) else self.server.defaultTeam).lower(),
                                      self.server.getMatch(team, priv, gm),
-                                     skin if skin in range(self.server.skinCount) else 0,
+                                     skin,
                                      gm,
                                      isDev
                                      )
@@ -264,6 +266,11 @@ class MyServerProtocol(WebSocketServerProtocol):
                 self.server.players.append(self.player)
                 
                 self.setState("g") # Ingame
+
+            elif type == "llb": # Leaderboard
+                leaderboard = datastore.getLeaderBoard()
+                
+                self.sendJSON({"packets": [{"data": leaderboard, "type": "slb"}], "type": "s01"})
 
             elif type == "llg": #login
                 if self.username != "" or self.player is not None or self.pendingStat is None:
@@ -399,6 +406,16 @@ class MyServerProtocol(WebSocketServerProtocol):
                     return
                 
                 datastore.updateAccount(self.username, packet)
+
+            elif type == "prc": #get skin
+                if self.username == "" or self.player is not None or self.pendingStat is None:
+                    self.sendClose()
+                    return
+
+                datastore.purchaseSkin(self.username, packet)
+                coins, skins = datastore.getSkinData(self.username)
+                j = {"type": "prc", "coins": coins, "skins": skins}
+                self.sendJSON(j)
 
             elif type == "lpc": #password change
                 if self.username == "" or self.player is not None or self.pendingStat is None:
@@ -563,12 +580,11 @@ class MyServerFactory(WebSocketServerFactory):
 
         reactor.callLater(5, self.generalUpdate)
 
-        l = task.LoopingCall(self.updateLeaderBoard)
-        l.start(60.0)
+        #l = task.LoopingCall(self.updateLeaderBoard)
+        #l.start(10.0)
 
     def updateLeaderBoard(self):
         if self.leaderBoardPath != '':
-            print("Updating leader board at "+self.leaderBoardPath)
             leaderBoard = datastore.getLeaderBoard()
             with open(self.leaderBoardPath, "w") as f:
                 f.write(json.dumps(leaderBoard))
@@ -676,9 +692,11 @@ class MyServerFactory(WebSocketServerFactory):
     def generalUpdate(self):
         playerCount = len(self.players)
 
-        print("pc: {0}, mc: {1}, in: {2}, out: {3}".format(playerCount, len(self.matches), self.in_messages, self.out_messages))
+        print("players: {0}, matches: {1}, in: {2}, out: {3}".format(playerCount, len(self.matches), self.in_messages, self.out_messages))
         self.in_messages = 0
         self.out_messages = 0
+
+        self.updateLeaderBoard()
 
         self.tryReloadFile(self.configFilePath, self.readConfig)
         if self.assetsMetadataPath:
