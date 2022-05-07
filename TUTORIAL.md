@@ -22,7 +22,7 @@ If you don't plan on using TLS go to the last few lines in `server.py` and chang
 ## Levels
 The server has 2 ways of getting level data:
 - From the `levels` folder which doesn't exist by default
-- From the web server (/game/world-x)
+- From the web server (/game/world-x)<br>
 For the first method, create a `levels` folder where the server files are, then put in worlds as you like (required: lobby.json)<br>
 For the second method, you'll need to make a `game` folder where the the game files are hosted (ex: /var/www/html/game), put in the worlds (again, required: lobby.json), then in `server.cfg` (assuming you renamed it), scroll down to the `Worlds:` part, then insert the filename of the world (minus the .json part, ex: `Worlds: world-1,world-p`)
 
