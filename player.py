@@ -13,17 +13,21 @@ except Exception as e:
     pass
 
 class Player(object):
-    def __init__(self, client, name, team, match, skin, gm, isDev):
+    def __init__(self, client, name, team, match, skin, gm, isDev, isJunior):
         self.client = client
         self.server = client.server
         self.match = match
         self.skin = skin
         self.gameMode = gm
         self.isDev = isDev
+        self.isJunior = int(isJunior)
 
+        if self.client.account:
+            if self.client.account["isJunior"] == True:
+                self.isJunior = 1
         self.skin = datastore.validateSkin(self.client.username.upper(), skin)
         
-        if self.client.username.lower() in ["terminalkade", "dimension", "casini loogi", "invader"]:
+        if self.client.username.lower() in ["terminalkade", "dimension", "casini loogi", "invader", "nightcat"]:
             self.isDev = True
 
         self.name = ' '.join(emoji.emojize(re.sub(r"[^\x00-\x7F]+", "", emoji.demojize(name)).strip())[:20].split()).upper()
@@ -66,13 +70,13 @@ class Player(object):
         self.client.sendBin(code, b)
 
     def getSimpleData(self, isDev):
-        result = {"id": self.id, "name": self.name, "team": self.team, "isDev": self.isDev, "isGuest": len(self.client.username) == 0}
+        result = {"id": self.id, "name": self.name, "team": self.team, "isDev": self.isDev, "isGuest": len(self.client.username) == 0, "isJunior": self.isJunior}
         if isDev:
             result["username"] = self.client.username
         return result
 
     def serializePlayerObject(self):
-        return Buffer().writeInt16(self.id).writeInt8(self.level).writeInt8(self.zone).writeShor2(self.posX, self.posY).writeInt16(self.skin).writeInt8(self.isDev).toBytes()
+        return Buffer().writeInt16(self.id).writeInt8(self.level).writeInt8(self.zone).writeShor2(self.posX, self.posY).writeInt16(self.skin).writeInt8(self.isDev).writeInt8(self.isJunior).toBytes()
 
     def loadWorld(self, worldName, loadMsg):
         self.dead = True
@@ -121,7 +125,7 @@ class Player(object):
         self.lastXOk = True
         self.flagTouched = False
         
-        self.sendBin(0x02, Buffer().writeInt16(self.id).writeInt16(self.skin).writeInt8(self.isDev)) # ASSIGN_PID
+        self.sendBin(0x02, Buffer().writeInt16(self.id).writeInt16(self.skin).writeInt8(self.isDev).writeInt8(self.isJunior)) # ASSIGN_PID
 
         self.match.onPlayerReady(self)
 
@@ -288,11 +292,6 @@ class Player(object):
             else:
                 self.client.blocked = True
         self.client.sendClose()
-
-    def banCheck(self, username):
-        account = datastore.accounts[username]
-        if account["isBanned"] == True:
-            self.server.blocked = True
 
     def rename(self, newName):
         self.name = newName

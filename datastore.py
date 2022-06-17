@@ -252,7 +252,9 @@ def updateStats(username, stats):
         acc["isBanned"] = stats["isBanned"]
         print("Banned " + username)
     if "isDev" in stats:
-        acc["isDev"] == stats["isDev"]
+        acc["isDev"] = stats["isDev"]
+    if "isJunior" in stats:
+        acc["isJunior"] = stats["isJunior"]
 
     persistState()
 

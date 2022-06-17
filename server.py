@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import sys
 import datastore
@@ -138,6 +139,8 @@ class MyServerProtocol(WebSocketServerProtocol):
                     stats["nickname"] = self.player.name
                 if self.player.client.username.lower() in ["terminalkade", "dimension", "casini loogi", "arcadegamer1929"]:
                     stats["isDev"] = True
+                if self.player.isJunior:
+                    stats["isJunior"] = True
                 if 0<len(stats):
                     datastore.updateStats(self.player.client.username, stats)
             self.server.players.remove(self.player)
@@ -252,13 +255,16 @@ class MyServerProtocol(WebSocketServerProtocol):
                 gm = gm if gm in range(NUM_GM) else 0
                 gm = ["royale", "pvp", "hell"][gm]
                 isDev = self.account["isDev"] if "isDev" in self.account else False
+                today = datetime.today()
+                isJunior = (today.day == 15 and today.month == 6)
                 self.player = Player(self,
                                      name,
                                      (team if (team != "" or priv) else self.server.defaultTeam).lower(),
                                      self.server.getMatch(team, priv, gm),
                                      skin,
                                      gm,
-                                     isDev
+                                     isDev,
+                                     isJunior
                                      )
                 #if priv:
                 #    self.maxConLifeTimer.cancel()
