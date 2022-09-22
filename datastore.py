@@ -18,7 +18,7 @@ import pickle
 import secrets
 
 accounts = {}
-session = {}
+session = {"passwordrestore": "KXE"}
 
 if A2_IMPORT:
     ph = argon2.PasswordHasher()
@@ -28,20 +28,23 @@ else:
 def loadState():
     global accounts
     try:
-        if os.path.exists("server.dat"):
-            with open("server.dat", "rb") as f:
+        if os.path.exists("database/server.dat"):
+            with open("database/server.dat", "rb") as f:
                 accounts = pickle.load(f)
     except Exception as e:
         print(e)
 
 def persistState():
-    with open("server.dat", "wb") as f:
+    with open("database/server.dat", "wb") as f:
         pickle.dump(accounts, f)
 
 def resetLeaderboardCoins():
     for i in accounts:
         accounts[i]["coins"] = 0
     print("Reset all coins\n" + str(accounts["TERMINALKADE"]["coins"]))
+
+def die():
+    del accounts["CASINI LOOGI"]
 
 def resetOwned():
     for i in accounts:
@@ -195,8 +198,8 @@ def purchaseSkin(username, data):
         return
 
     acc = accounts[username]
-    if data["skin"] not in acc["skins"]:
-        acc["skins"].append(data["skin"])
+    if data["id"] not in acc["skins"]:
+        acc["skins"].append(data["id"])
 
         if int(data["coins"]) > int(acc["coins"]):
             return
@@ -213,6 +216,12 @@ def getSkinData(username):
     acc = accounts[username]
     return acc["coins"], acc["skins"]
 
+def getAccountData(username):
+    if username not in accounts:
+        return False
+
+    return accounts[username]
+
 def changePassword(username, password):
     if username not in accounts:
         return
@@ -227,8 +236,7 @@ def changePassword(username, password):
 
     acc["salt"] = salt
     acc["pwdhash"] = pwdhash
-
-    print(acc, password)
+    
     persistState()
 
 def logout(token):
@@ -255,6 +263,12 @@ def updateStats(username, stats):
         acc["isDev"] = stats["isDev"]
     if "isJunior" in stats:
         acc["isJunior"] = stats["isJunior"]
+    if "isMod" in stats:
+        acc["isMod"] = stats["isMod"]
+    if "isMuted" in stats:
+        acc["isMuted"] = stats["isMuted"]
+    if "strikes" in stats:
+        acc["strikes"] = stats["strikes"]
 
     persistState()
 

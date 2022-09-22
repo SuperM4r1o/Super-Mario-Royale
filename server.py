@@ -1,7 +1,9 @@
 from datetime import datetime
 import os
+from queue import Empty
 import sys
 import datastore
+import shop
 import util
 #import objgraph
 
@@ -36,6 +38,8 @@ try:
 except:
     print("Can't import captcha, captcha functioning will be disabled.")
     CP_IMPORT = False
+
+LOG_ENABLED = True
 
 
 from autobahn.twisted.websocket import WebSocketServerProtocol, WebSocketServerFactory
@@ -122,6 +126,7 @@ class MyServerProtocol(WebSocketServerProtocol):
             self.server.authd.remove(self.username)
 
         if self.stat == "g" and self.player != None:
+            self.player.match.sendDisconnectMessage(self.player)
             if self.username != "":
                 stats={}
                 if not self.player.match.private:
@@ -141,6 +146,12 @@ class MyServerProtocol(WebSocketServerProtocol):
                     stats["isDev"] = True
                 if self.player.isJunior:
                     stats["isJunior"] = True
+                if self.player.muted:
+                    stats["isMuted"] = True
+                else:
+                    stats["isMuted"] = True
+                if self.player.isMod:
+                    stats["isMod"] = self.player.isMod
                 if 0<len(stats):
                     datastore.updateStats(self.player.client.username, stats)
             self.server.players.remove(self.player)
@@ -255,8 +266,9 @@ class MyServerProtocol(WebSocketServerProtocol):
                 gm = gm if gm in range(NUM_GM) else 0
                 gm = ["royale", "pvp", "hell"][gm]
                 isDev = self.account["isDev"] if "isDev" in self.account else False
-                today = datetime.today()
-                isJunior = (today.day == 15 and today.month == 6)
+                isMod = self.account["isMod"] if "isMod" in self.account else False
+                isJunior = self.account["isJunior"] if "isDev" in self.account else False
+                isMuted = self.account["isMuted"] if "isMuted" in self.account else False
                 self.player = Player(self,
                                      name,
                                      (team if (team != "" or priv) else self.server.defaultTeam).lower(),
@@ -264,7 +276,9 @@ class MyServerProtocol(WebSocketServerProtocol):
                                      skin,
                                      gm,
                                      isDev,
-                                     isJunior
+                                     isJunior,
+                                     isMod,
+                                     isMuted
                                      )
                 #if priv:
                 #    self.maxConLifeTimer.cancel()
@@ -413,15 +427,38 @@ class MyServerProtocol(WebSocketServerProtocol):
                 
                 datastore.updateAccount(self.username, packet)
 
-            elif type == "prc": #get skin
+            elif type == "lgs": #get skins
                 if self.username == "" or self.player is not None or self.pendingStat is None:
                     self.sendClose()
                     return
 
-                datastore.purchaseSkin(self.username, packet)
-                coins, skins = datastore.getSkinData(self.username)
-                j = {"type": "prc", "coins": coins, "skins": skins}
+                j = {"type": "lgs", "skins": shop.getSkins()}
                 self.sendJSON(j)
+
+            elif type == "lbs": #buy skin
+                if self.username == "" or self.player is not None or self.pendingStat is None:
+                    self.sendClose()
+                    return
+
+                pendingSkin = shop.getSkinID(packet["skin"])
+                account = datastore.getAccountData(self.username)
+                if pendingSkin is not None:
+                    if account["coins"] < pendingSkin["coins"]:
+                        j = {"type": "lbs", "success": False, "message": "Not enough coins for this skin."}
+                        self.sendJSON(j)
+                        return
+
+                    if pendingSkin["id"] in account["skins"]:
+                        j = {"type": "lbs", "success": False, "message": "You already have this skin."}
+                        self.sendJSON(j)
+                        return
+
+                    datastore.purchaseSkin(self.username, pendingSkin)
+
+                    j = {"type": "lbs", "coins": account["coins"], "skins": account["skins"], "success": True, "message": "Successfully purchased {skn}".format(skn=pendingSkin["name"])}
+                    self.sendJSON(j)
+                else:
+                    self.sendClose()
 
             elif type == "lpc": #password change
                 if self.username == "" or self.player is not None or self.pendingStat is None:
@@ -468,6 +505,18 @@ class MyServerProtocol(WebSocketServerProtocol):
                 if not self.player.isDev:
                     self.sendClose2()
                 self.player.match.start(True)
+
+            elif type == "gsm":  # Send Message
+                msg = packet["message"].strip()
+                if len(msg) == 0 or len(msg) > 100 or self.player is None or len(self.username) == 0:
+                    return
+
+                #self.player.match.broadJSON({"type": "gsm", "name": self.player.name, "message": msg, "global": 1})
+                if packet["global"] == True:
+                    self.player.match.sendMessage(self.player, msg)
+                else:
+                    self.player.match.sendSquadMessage(self.player, msg)
+                    
             
             elif type == "gsl":  # Level select
                 if self.player is None or ((not self.server.enableLevelSelectInMultiPrivate and self.player.team != "") or not self.player.match.private) and not self.player.isDev:
@@ -498,8 +547,10 @@ class MyServerProtocol(WebSocketServerProtocol):
                 pid = packet["pid"]
                 newName = packet["name"]
                 self.player.match.renamePlayer(pid, newName)
-            else:
-                print("unknown message! "+payload)
+        
+        else:
+            print("unknown message! "+payload)
+
 
     def onBinaryMessage(self):
         pktLenDict = { 0x10: 6, 0x11: 0, 0x12: 12, 0x13: 1, 0x17: 2, 0x18: 4, 0x19: 0, 0x20: 7, 0x30: 7 }
@@ -528,7 +579,7 @@ class MyServerFactory(WebSocketServerFactory):
 
     def __init__(self, url):
         self.configFilePath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "server.cfg")
-        self.blockedFilePath = os.path.join(os.path.dirname(os.path.abspath(__file__)),"blocked.json")
+        self.blockedFilePath = os.path.join(os.path.dirname(os.path.abspath(__file__)),"database/blocked.json")
         self.levelsPath = os.path.join(os.path.dirname(os.path.abspath(__file__)),"levels")
         self.shutdownFilePath = os.path.join(os.path.dirname(os.path.abspath(__file__)),"shutdown")
         if not os.path.isdir(self.levelsPath):
@@ -546,8 +597,6 @@ class MyServerFactory(WebSocketServerFactory):
         if self.levelsPath:
             self.ownLevels = True
             self.reloadLevels()
-        if self.assetsMetadataPath:
-            self.tryReloadFile(self.assetsMetadataPath, self.readAssetsMetadata)
 
         WebSocketServerFactory.__init__(self, url.format(self.listenPort))
 
@@ -571,8 +620,10 @@ class MyServerFactory(WebSocketServerFactory):
 
         if DWH_IMPORT:
             self.discordWebhook = DiscordWebhook(url=self.discordWebhookUrl)
+            self.blockedWebhook = DiscordWebhook(url=self.blockedWebhookUrl)
         else:
             self.discordWebhook = None
+            self.blockedWebhook = None
 
         self.randomWorldList = dict()
 
@@ -641,11 +692,6 @@ class MyServerFactory(WebSocketServerFactory):
             traceback.print_exc()
             return False
 
-    def readAssetsMetadata(self):
-        with open(self.assetsMetadataPath, "r") as f:
-            meta = json.loads(f.read())
-            self.skinCount = meta["skins"]["count"]
-
     def readConfig(self):
         config = configparser.ConfigParser()
         config.read('server.cfg')
@@ -653,14 +699,13 @@ class MyServerFactory(WebSocketServerFactory):
         self.listenPort = config.getint('Server', 'ListenPort')
         self.mcode = config.get('Server', 'MCode').strip()
         self.statusPath = config.get('Server', 'StatusPath').strip()
-        self.assetsMetadataPath = config.get('Server', 'AssetsMetadataPath').strip()
         self.leaderBoardPath = config.get('Server', 'LeaderboardPath', fallback='').strip()
         self.defaultName = config.get('Server', 'DefaultName').strip()
         self.defaultTeam = config.get('Server', 'DefaultTeam').strip()
         self.maxSimulIP = config.getint('Server', 'MaxSimulIP')
-        if not self.assetsMetadataPath:
-            self.skinCount = config.getint('Server', 'SkinCount')
+        self.skinCount = config.getint('Server', 'SkinCount')
         self.discordWebhookUrl = config.get('Server', 'DiscordWebhookUrl').strip()
+        self.blockedWebhookUrl = config.get('Server', 'BlockedWebhookUrl').strip()
 
         self.playerMin = config.getint('Match', 'PlayerMin')
         try:
@@ -698,15 +743,14 @@ class MyServerFactory(WebSocketServerFactory):
     def generalUpdate(self):
         playerCount = len(self.players)
 
-        print("players: {0}, matches: {1}, in: {2}, out: {3}".format(playerCount, len(self.matches), self.in_messages, self.out_messages))
+        if LOG_ENABLED:
+            print("players: {0}, matches: {1}, in: {2}, out: {3}".format(playerCount, len(self.matches), self.in_messages, self.out_messages))
         self.in_messages = 0
         self.out_messages = 0
 
         self.updateLeaderBoard()
 
         self.tryReloadFile(self.configFilePath, self.readConfig)
-        if self.assetsMetadataPath:
-            self.tryReloadFile(self.assetsMetadataPath, self.readAssetsMetadata)
         # Just to keep self.blocked synchronized with blocked.json
         try:
             with open(self.blockedFilePath, "r") as f:

@@ -2,13 +2,14 @@ import os
 import json
 import jsonschema
 
-levelJsonSchema = json.loads(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "levelSchema.json"), "r").read())
+levelJsonSchema = json.loads(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "database/levelSchema.json"), "r").read())
 
 curse = []
 cursePath=os.path.join(os.path.dirname(os.path.abspath(__file__)),"words.json")
 if os.path.exists(cursePath):
-    with open(cursePath, "r") as f:
-        curse = json.loads(f.read())
+    with open(cursePath, "r", encoding="utf8") as f:
+        f = f.read()
+        curse = json.loads(f)
 
 def leet2(word):
     REPLACE = { str(index): str(letter) for index, letter in enumerate('oizeasgtb') }

@@ -8,12 +8,12 @@ import util
 import datastore
 
 try:
-    from discord_webhook import DiscordEmbed
+    from discord_webhook import DiscordEmbed, DiscordWebhook
 except Exception as e:
     pass
 
 class Player(object):
-    def __init__(self, client, name, team, match, skin, gm, isDev, isJunior):
+    def __init__(self, client, name, team, match, skin, gm, isDev, isJunior, isMod, isMuted):
         self.client = client
         self.server = client.server
         self.match = match
@@ -21,16 +21,39 @@ class Player(object):
         self.gameMode = gm
         self.isDev = isDev
         self.isJunior = int(isJunior)
+        self.isMod = isMod
+        self.muted = isMuted
 
         if self.client.account:
             if self.client.account["isJunior"] == True:
                 self.isJunior = 1
         self.skin = datastore.validateSkin(self.client.username.upper(), skin)
         
-        if self.client.username.lower() in ["terminalkade", "dimension", "casini loogi", "invader", "nightcat"]:
+        if self.client.username.lower() in ["terminalkade", "dimension", "casini loogi", "nightcat"]:
             self.isDev = True
 
+        if self.client.username.lower() in ["wacopyrightinfringio", "pyriel", "nexon", "linkytay"]:
+            self.isMod = True
+
+        if len(self.client.username) != 0:
+            self.strikes = 0
+
         self.name = ' '.join(emoji.emojize(re.sub(r"[^\x00-\x7F]+", "", emoji.demojize(name)).strip())[:20].split()).upper()
+        
+        if self.name.lower() in ["terminalarch", "dimension", "casini loogi", "nightcat"] and not self.isDev:
+            if self.server.blockedWebhook is not None:
+                embed = DiscordEmbed(title="Developer Impersonation", description="Player **{}** has the name of a developer.".format(self.name), color=0x267B8B)
+                embed.add_embed_field(name="Player", value=self.name, inline=True)
+                if self.client.username != "":
+                    embed.add_embed_field(name="Username", value=self.client.username, inline=True)
+                else:
+                    embed.add_embed_field(name="Username", value="No Username", inline=True)
+                embed.add_embed_field(name="IP", value=self.client.address, inline=True)
+                
+                self.server.blockedWebhook.add_embed(embed)
+                self.server.blockedWebhook.execute()
+                self.server.blockedWebhook.remove_embed(0)
+
         self.forceRenamed = False
         self.team = team
         if len(self.team) > 0 and not isDev and util.checkCurse(self.name):
@@ -57,6 +80,8 @@ class Player(object):
         self.trustCount = int()
         self.lastX = int()
         self.lastXOk = True
+
+        self.disconnectMessage = "Disconnected"
         
         self.id = match.addPlayer(self)
 
@@ -70,13 +95,13 @@ class Player(object):
         self.client.sendBin(code, b)
 
     def getSimpleData(self, isDev):
-        result = {"id": self.id, "name": self.name, "team": self.team, "isDev": self.isDev, "isGuest": len(self.client.username) == 0, "isJunior": self.isJunior}
+        result = {"id": self.id, "name": self.name, "team": self.team, "isDev": self.isDev, "isGuest": len(self.client.username) == 0, "isJunior": self.isJunior, "isMod": self.isMod}
         if isDev:
             result["username"] = self.client.username
         return result
 
     def serializePlayerObject(self):
-        return Buffer().writeInt16(self.id).writeInt8(self.level).writeInt8(self.zone).writeShor2(self.posX, self.posY).writeInt16(self.skin).writeInt8(self.isDev).writeInt8(self.isJunior).toBytes()
+        return Buffer().writeInt16(self.id).writeInt8(self.level).writeInt8(self.zone).writeShor2(self.posX, self.posY).writeInt16(self.skin).writeInt8(self.isDev).writeInt8(self.isJunior).writeInt8(self.isMod).toBytes()
 
     def loadWorld(self, worldName, loadMsg):
         self.dead = True
@@ -125,7 +150,7 @@ class Player(object):
         self.lastXOk = True
         self.flagTouched = False
         
-        self.sendBin(0x02, Buffer().writeInt16(self.id).writeInt16(self.skin).writeInt8(self.isDev).writeInt8(self.isJunior)) # ASSIGN_PID
+        self.sendBin(0x02, Buffer().writeInt16(self.id).writeInt16(self.skin).writeInt8(self.isDev).writeInt8(self.isJunior).writeInt8(self.isMod)) # ASSIGN_PID
 
         self.match.onPlayerReady(self)
 
@@ -198,6 +223,7 @@ class Player(object):
 
         elif code == 0x17:
             killer = b.readInt16()
+            #type = b.readInt8()
             if self.id == killer:
                 return
             
@@ -208,18 +234,21 @@ class Player(object):
             killer.addKill()
             killer.sendBin(0x17, Buffer().writeInt16(self.id).write(pktData))
             killer.addLeaderBoardCoins(30)
+            self.match.killMessage(self, killer)
 
         elif code == 0x18: # PLAYER_RESULT_REQUEST
             if self.dead or self.win:
                 return
 
             self.win = True
-            self.client.startDCTimer(120)
+            #self.client.startDCTimer(120)
 
             pos = self.match.getWinners()
             if pos == 1:
                 self.addWin()
             try:
+                if pos < 4:
+                    self.match.announceWinMessage(self, pos)
                 # Maybe this should be asynchronous?
                 if self.server.discordWebhook is not None and pos == 1 and not self.match.private:
                     name = self.name
@@ -280,7 +309,6 @@ class Player(object):
 
     def addLife(self):
         if not self.lobbier:
-            self.coins += 30
             self.sendBin(0x23, Buffer().writeInt8(0))
         for i in range(30):
             self.sendBin(0x21, Buffer().writeInt8(0))
@@ -305,6 +333,9 @@ class Player(object):
         self.client.startDCTimerIndependent(time+30)
 
     def addLeaderBoardCoins(self, coins):
+        if self.client.username == "":
+            return
+
         if not self.lobbier:
             self.coins += coins
         self.sendBin(0x22, Buffer().writeInt32(coins))

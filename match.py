@@ -5,6 +5,12 @@ import json
 import random
 import util
 import copy
+from profanity import has_profanity, censor_profanity, get_profanity
+
+try:
+    from discord_webhook import DiscordEmbed, DiscordWebhook
+except Exception as e:
+    pass
 
 class Match(object):
     def __init__(self, server, roomName, private, gameMode):
@@ -16,6 +22,7 @@ class Match(object):
         self.world = "lobby"
         self.roomName = roomName
         self.closed = False
+        self.startedMsg = False
         self.private = private
         self.gameMode = gameMode
         self.levelMode = self.gameMode
@@ -47,6 +54,7 @@ class Match(object):
 
     def addPlayer(self, player):
         self.players.append(player)
+        self.broadJSON({"type": "gsm", "message": player.name + " joined the game.", "global": 1, "warn": 3})
         return self.getNextPlayerId()
 
     def removePlayer(self, player):
@@ -75,6 +83,12 @@ class Match(object):
     def getPlayer(self, pid):
         for player in self.players:
             if player.id == pid:
+                return player
+        return None
+
+    def getPlayerName(self, name):
+        for player in self.players:
+            if player.name.lower() == name.lower():
                 return player
         return None
             
@@ -387,8 +401,6 @@ class Match(object):
         player = self.getPlayer(pid)
         if player is None:
             return
-        if player.isDev:
-            return
         player.rename(newName)
         self.broadJSON({"type":"gnm", "pid":pid, "name":newName})
 
@@ -400,3 +412,181 @@ class Match(object):
         if (self.autoStartOn):
             self.autoStartTicks -= 1
         self.broadTick()
+
+    def sendMessage(self, player, message):
+        if player.muted and not player.isDev and not player.isMod:
+            self.sendMutedMessage(player, 1)
+            return
+
+        if player.strikes >= 5 and not player.isDev and not player.isMod:
+            self.strikeMessage(player, 1)
+            return
+
+        if has_profanity(message) and not player.isDev and not player.isMod:
+            message = censor_profanity(message)
+            print(len(get_profanity(message, True)))
+            if len(get_profanity(message, True)) >= 3:
+                self.sendWarningMessage(player, 1)
+
+        self.broadJSON({"type": "gsm", "name": player.name, "message": message, "global": 1, "warn": 0, "mod": player.isMod, "dev": player.isDev})
+        if player.isDev or player.isMod:
+            self.commandHandler(player, message)
+
+    def sendSquadMessage(self, player, message):
+        if player.muted and not player.isDev and not player.isMod:
+            self.sendMutedMessage(player, 0)
+            return
+
+        if player.strikes >= 5 and not player.isDev and not player.isMod:
+            self.strikeMessage(player, 0)
+            return
+
+        if has_profanity(message) and not player.isDev and not player.isMod:
+            message = censor_profanity(message)
+            if len(get_profanity(message, True)) >= 3:
+                self.sendWarningMessage(player, 0)
+
+        for p in self.players:
+            if not p.loaded or p.team != player.team:
+                continue
+            p.sendJSON({"type": "gsm", "name": player.name, "message": message, "global": 0, "warn": 0, "mod": player.isMod, "dev": player.isDev})
+
+    def sendWarningMessage(self, player, public):
+        if player.strikes >= 5:
+            self.strikeMessage(player, public)
+            return
+
+        self.strike(player)
+        player.sendJSON({"type": "gsm", "message": "[WARNING] " + player.name + ", your message contains a blocked word! You have: " + str(player.strikes) + "/5 strikes.", "global": public, "warn": 1, "tag": 0})
+
+    def strikeMessage(self, player, public):
+        if player.strikes >= 5:
+            player.sendJSON({"type": "gsm", "message": "[ERROR] " + player.name + ", you have too many strikes! You are unable to send messages anymore.", "global": public, "warn": 2, "tag": 0})
+    
+    def sendMutedMessage(self, player, public):
+        if player.muted:
+            player.sendJSON({"type": "gsm", "message": "[ERROR] " + player.name + ", you are muted, contact a mod on our Discord if you believe this is a mistake.", "global": public, "warn": 2, "tag": 0})
+    
+    def sendDisconnectMessage(self, player):
+        self.broadJSON({"type": "gsm", "message": player.name + " left the game. ({msg})".format(msg=player.disconnectMessage), "global": 1, "warn": 1})
+
+    def announceWinMessage(self, player, pos):
+        self.broadJSON({"type": "gsm", "message": player.name + " achieved #" + str(pos) + " Victory Royale!", "global": 1, "warn": 4})
+
+    def killMessage(self, player, killer, type):
+        if type < 0:
+            return
+
+        feedMessages = [
+            "{participant} was star-struck by {opponent}'s super star!",
+            "{participant} got fired by {opponent}'s fire flower!",
+            "{participant} got shell-shocked by {opponent}!"
+            "{opponent} killed {participant}!"
+        ]
+
+        type = 3
+        #message = feedMessages[type].format(participant=player.name, opponent=killer.name)
+        message = "{opponent} killed {participant}".format(participant=player.name, opponent=killer.name)
+        self.broadJSON({"type": "gsm", "message": message, "global": 1, "warn": 3})        
+
+    def strike(self, player):
+        player.strikes += 1
+        if player.strikes >= 5:
+            player.muted = True
+            if self.server.blockedWebhook is not None:
+                embed = DiscordEmbed(title="Player Striked Out", color=0x267B8B)
+                embed.add_embed_field(name="Player Name", value=player.name, inline=True)
+                embed.add_embed_field(name="Strike Count", value=player.strikes, inline=True)
+                
+                self.server.blockedWebhook.add_embed(embed)
+                self.server.blockedWebhook.execute()
+                self.server.blockedWebhook.remove_embed(0)
+
+
+    def commandHandler(self, player, message):
+        args = message.split(" ", 1)
+        if args[0] == "/kick":
+            p = self.getPlayerName(args[1])
+            if p is not None:
+                p.disconnectMessage = "Kicked by moderator"
+                p.client.sendClose()
+                self.broadJSON({"type": "gsm", "message": "[MOD] Successfully kicked " + p.name, "global": 1, "warn": 3, "tag": 0})
+
+                if self.server.blockedWebhook is not None:
+                    embed = DiscordEmbed(title="Player Kicked", color=0x267B8B)
+                    embed.add_embed_field(name="Player", value=p.name, inline=True)
+                    embed.add_embed_field(name="Moderator", value=player.name, inline=True)
+                
+                    self.server.blockedWebhook.add_embed(embed)
+                    self.server.blockedWebhook.execute()
+                    self.server.blockedWebhook.remove_embed(0)
+            else:
+                self.broadJSON({"type": "gsm", "message": "[MOD] Could not kick " + args[1], "global": 1, "warn": 2, "tag": 0})
+
+        elif args[0] == "/mute":
+            p = self.getPlayerName(args[1])
+            if p is not None:
+                p.muted = True
+                self.broadJSON({"type": "gsm", "message": "[MOD] Successfully muted " + p.name, "global": 1, "warn": 3, "tag": 0})
+
+                if self.server.blockedWebhook is not None:
+                    embed = DiscordEmbed(title="Player Muted", color=0x267B8B)
+                    embed.add_embed_field(name="Player", value=p.name, inline=True)
+                    embed.add_embed_field(name="Moderator", value=player.name, inline=True)
+                
+                    self.server.blockedWebhook.add_embed(embed)
+                    self.server.blockedWebhook.execute()
+                    self.server.blockedWebhook.remove_embed(0)
+            else:
+                self.broadJSON({"type": "gsm", "message": "[MOD] Could not mute " + args[1], "global": 1, "warn": 2, "tag": 0})
+
+        elif args[0] == "/unmute":
+            p = self.getPlayerName(args[1])
+            if p is not None:
+                p.muted = False
+                self.broadJSON({"type": "gsm", "message": "[MOD] Successfully unmuted " + p.name, "global": 1, "warn": 3, "tag": 0})
+
+                if self.server.blockedWebhook is not None:
+                    embed = DiscordEmbed(title="Player Unmuted", color=0x267B8B)
+                    embed.add_embed_field(name="Player", value=p.name, inline=True)
+                    embed.add_embed_field(name="Moderator", value=player.name, inline=True)
+                
+                    self.server.blockedWebhook.add_embed(embed)
+                    self.server.blockedWebhook.execute()
+                    self.server.blockedWebhook.remove_embed(0)
+
+            else:
+                self.broadJSON({"type": "gsm", "message": "[MOD] Could not unmute " + args[1], "global": 1, "warn": 2, "tag": 0})
+
+        elif args[0] == "/start":
+            if not self.startedMsg:
+                self.broadJSON({"type": "gsm", "message": "[MOD] " + player.name + " manually started the match", "global": 1, "warn": 3})
+            self.start(True)
+
+        elif args[0] == "/stats":
+            p = self.getPlayerName(args[1])
+            if p is not None:
+                if len(p.client.username) == 0:
+                    self.broadJSON({"type": "gsm", "message": "[MOD] " + p.name + " does not have an account.", "global": 1, "warn": 1})
+                    return
+
+                acc = p.client.account
+                result = "{win}x wins, {death}x deaths, {kill}x kills and {coin} coins.".format(win=acc.wins, death=acc.deaths, kill=acc.kills, coin=acc.coins)
+
+                self.broadJSON({"type": "gsm", "message": "[MOD] " + p.name + " has:\n\n" + result, "global": 1, "warn": 1})
+
+        elif args[0] == "/help":
+            commands = [
+                ["/kick [player]", "Kick a player from the match\n\n"],
+                ["/mute [player]", "Mutes a player\n\n"],
+                ["/unmute [player]", "Unmutes a player\n\n"],
+                ["/start", "Starts the match without having to wait for the timer\n\n"],
+                ["/stats [player]", "View the stats of a player, provided they have an account"]
+            ]
+
+            msg = ""
+            for command in commands:
+                msg += "{cmd} :: {desc}".format(cmd=command[0], desc=command[1])
+
+            #self.broadJSON({"type": "gsm", "message": "[MOD] Commands:\n\n/kick [player] :: Kick a player from the match\n\n/mute [player] :: Mutes a player, stopping them from sending messages.\n\n/unmute [player] :: Unmutes a player if already muted.\n\n/start :: When in the lobby, using this command starts the match.", "global": 1, "warn": 1})
+            self.broadJSON({"type": "gsm", "message": "[MOD] Commands:\n\n" + msg, "global": 1, "warn": 1})
