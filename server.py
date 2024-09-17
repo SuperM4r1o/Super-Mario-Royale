@@ -900,5 +900,5 @@ if __name__ == '__main__':
     factory = MyServerFactory(u"ws://127.0.0.1:{0}/royale/ws")
     factory.setProtocolOptions(autoPingInterval=5, autoPingTimeout=5)
 
-    reactor.listenSSL(factory.listenPort, factory, contextFactory)
+    reactor.listenTCP(factory.listenPort, factory, contextFactory)
     reactor.run()
